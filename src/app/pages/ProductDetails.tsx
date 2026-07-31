@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { ProductService } from '../services/productService';
 import { useCart } from '../contexts/CartContext';
 
 export const ProductDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const product = ProductService.getProductById(id || '') || ProductService.getProductById('detail-lotus')!;
-  const { addToCart } = useCart();
+  const { products, addToCart } = useCart();
+  const product = products.find((item) => item.id === id) ?? products[0];
 
   const [selectedSize, setSelectedSize] = useState<string>('M');
   const [selectedColor, setSelectedColor] = useState<string>('#0B1621');
@@ -25,7 +24,7 @@ export const ProductDetails: React.FC = () => {
   };
 
   return (
-    <main className="pt-24 pb-section-gap">
+    <main className="min-h-screen bg-[#4A0E17] pt-24 pb-section-gap text-[#D4AF37]">
       <div className="max-w-container-max mx-auto grid grid-cols-1 md:grid-cols-12 gap-gutter px-margin-mobile md:px-margin-desktop w-full">
         {/* Hero Section: Product Image */}
         <div className="md:col-span-7 lg:col-span-8">
@@ -64,48 +63,38 @@ export const ProductDetails: React.FC = () => {
         {/* Product Info & Selection */}
         <div className="md:col-span-5 lg:col-span-4 flex flex-col gap-8 w-full">
           <div className="flex flex-col gap-2">
-            <span className="font-label-md text-label-md text-secondary tracking-[0.3em]">
+            <span className="font-label-md text-label-md text-[#D4AF37] tracking-[0.3em] uppercase">
               {product.subtitle || 'المجموعة التراثية'}
             </span>
-            <h1 className="font-headline-xl text-headline-xl arabic-serif text-primary">
+            <h1 className="font-headline-xl text-headline-xl arabic-serif text-[#D4AF37]">
               {product.name}
             </h1>
             <div className="flex items-center gap-4 mt-2">
-              <p className="font-headline-md text-headline-md text-brand-burgundy">
+              <p className="font-headline-md text-headline-md text-[#D4AF37] font-bold">
                 {product.price.toLocaleString()} ج.م
               </p>
               {product.oldPrice && (
-                <span className="text-on-surface-variant line-through font-body-md">
+                <span className="text-[#D4AF37]/70 line-through font-body-md">
                   {product.oldPrice.toLocaleString()} ج.م
                 </span>
               )}
             </div>
           </div>
 
-          <div className="flex flex-col gap-4">
-            <h3 className="font-label-md text-label-md border-b border-outline-variant pb-2">عن القطعة</h3>
-            <p className="font-body-md text-body-md text-on-surface-variant leading-relaxed">
-              {product.description}
-            </p>
-          </div>
-
           {/* Size Selection */}
           <div className="flex flex-col gap-4">
             <div className="flex justify-between items-center">
-              <h3 className="font-label-md text-label-md">اختر المقاس</h3>
-              <button className="text-label-sm font-label-sm underline text-on-surface-variant">
-                جدول المقاسات
-              </button>
+              <h3 className="font-label-md text-label-md text-[#D4AF37]">اختر المقاس</h3>
             </div>
             <div className="flex gap-3">
               {sizes.map((size) => (
                 <button
                   key={size}
                   onClick={() => setSelectedSize(size)}
-                  className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
+                  className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
                     selectedSize === size
-                      ? 'border-2 border-primary bg-primary text-white'
-                      : 'border border-outline-variant hover:border-primary'
+                      ? 'border-2 border-[#D4AF37] bg-[#D4AF37] text-[#4A0E17]'
+                      : 'border border-[#D4AF37]/60 text-[#D4AF37] hover:border-[#D4AF37] hover:bg-white/10'
                   }`}
                 >
                   {size}
@@ -116,15 +105,17 @@ export const ProductDetails: React.FC = () => {
 
           {/* Color Selection */}
           <div className="flex flex-col gap-4">
-            <h3 className="font-label-md text-label-md">اللون</h3>
+            <h3 className="font-label-md text-label-md text-[#D4AF37]">اللون</h3>
             <div className="flex gap-4">
               {colors.map((colorHex) => (
                 <button
                   key={colorHex}
                   onClick={() => setSelectedColor(colorHex)}
                   style={{ backgroundColor: colorHex }}
-                  className={`w-8 h-8 rounded-full transition-all ${
-                    selectedColor === colorHex ? 'ring-2 ring-offset-2 ring-primary scale-110' : 'hover:ring-2 hover:ring-offset-2 hover:ring-brand-burgundy'
+                  className={`w-8 h-8 rounded-full border transition-all ${
+                    selectedColor === colorHex
+                      ? 'border-2 border-[#D4AF37] ring-2 ring-offset-2 ring-[#D4AF37] scale-110'
+                      : 'border-[#D4AF37]/60 hover:border-[#D4AF37] hover:ring-2 hover:ring-offset-2 hover:ring-[#D4AF37]'
                   }`}
                   aria-label={`Color ${colorHex}`}
                 />
@@ -135,7 +126,7 @@ export const ProductDetails: React.FC = () => {
           {/* Action Button */}
           <button
             onClick={handleAddToCart}
-            className="w-full bg-brand-burgundy text-white py-5 rounded-full font-label-md text-label-md flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-95 transition-all shadow-lg mt-4"
+            className="w-full bg-white text-[#4A0E17] py-5 rounded-full font-label-md text-label-md flex items-center justify-center gap-3 hover:bg-[#f3f0e5] active:scale-95 transition-all shadow-lg mt-4"
           >
             <span className="material-symbols-outlined">shopping_bag</span>
             إضافة إلى حقيبة التسوق

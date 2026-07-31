@@ -1,74 +1,95 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useCart } from '../contexts/CartContext';
 
-export const Home: React.FC = () => {
+const FALLBACK_IMG = 'https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=1200&q=80&auto=format&fit=crop&ixlib=rb-4.0.3&s=placeholder';
+
+const ensureFour = (list: any[]) => {
+  if (list.length >= 4) return list.slice(0, 4);
+  const output = [...list];
+  let index = 0;
+  while (output.length < 4 && list.length > 0) {
+    output.push(list[index % list.length]);
+    index += 1;
+  }
+  return output;
+};
+
+function CategorySection({ category }: { category: { id: string; title: string; description: string } }) {
+  const { products } = useCart();
+  const items = ensureFour(products.filter((product) => product.category === category.id));
+
   return (
-    <section className="relative h-screen w-full overflow-hidden bg-white">
-      <div className="absolute inset-0 z-0 flex items-center justify-center">
-        <img
-          alt="Athar Watermark"
-          className="w-[64%] h-auto object-contain opacity-100"
-          src="https://lh3.googleusercontent.com/aida-public/AB6AXuDPBx3FDnKHyIAGYg1cexhp1PiFI02DmHpX3kdsTszxTop1WWGAdMPDVfBKTOb_aa7xk06N8XvYYefXsI3-dMLc7XbYqa9DttdPrUGxbCoSJ5Y8aDVWya0NgwZViar8liSTX3QZ-9z1W7xgANzRk7NJFrX21QgsPgR1BMddxM4v1calcXDa-almOUotlKv-ajkyorPWN_4KkxW4PgANJ4TY1y4sJ5zqhT6oBkeEDoFXVratG4uD5VYnDyVIKVFWQcr9vVBrkd5SJi8e"
-          style={{ width: '80%', maxWidth: '600px', opacity: 1 }}
-        />
+    <section className="mb-16">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 className="text-3xl font-extrabold tracking-tight text-[#D4AF37]">{category.title}</h2>
+          <p className="mt-3 max-w-2xl text-sm text-[#F2E5CD]">{category.description}</p>
+        </div>
+
+        <Link
+          to={category.id === 'women' ? '/women' : category.id === 'men' ? '/men' : '/islamic'}
+          className="inline-flex items-center justify-center rounded-full bg-[#D4AF37] px-5 py-3 text-sm font-semibold text-[#4A0E17] transition hover:bg-[#c39f2f]"
+        >
+          تصفح كافة {category.title}
+        </Link>
       </div>
 
-      <div className="relative w-full h-full z-10 flex flex-col justify-center items-center px-margin-desktop gap-12">
-        <div className="w-full max-w-container-max flex flex-col md:flex-row-reverse justify-between items-center gap-8 scale-90">
-          <div className="text-center md:text-right max-w-xs scale-110">
-            <h1 className="text-4xl md:text-5xl font-bold text-[#1A1A1A] leading-tight text-[4.8rem]">أهلاً وسهلاً</h1>
-            <h1 className="text-4xl md:text-5xl font-bold text-[#5D0F22] leading-tight text-[4.8rem]">في أثر</h1>
-            <span className="block text-sm font-semibold tracking-widest text-[#5D0F22] mt-4 uppercase">أناقة لها غاية</span>
-          </div>
-          <div className="text-center md:text-left max-w-sm bg-white/50 backdrop-blur-sm p-6 rounded-lg scale-110">
-            <p className="text-base md:text-lg text-gray-600 leading-relaxed font-arabic text-[1.35rem]">
-              وجهتك الأولى للأناقة المتكاملة. نهتم بأدق التفاصيل لنقدم لك أزياءً رجالية ونسائية تجمع بين الجودة الفائقة والتصاميم التي تليق بك.
-            </p>
-          </div>
-        </div>
+      <div className="mt-8 grid gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-4 items-stretch">
+        {items.map((product) => (
+          <article
+            key={product.id}
+            className="flex h-full flex-col overflow-hidden rounded-[28px] bg-[#FCF3E9] border border-[#D4AF37]/20 shadow-[0_20px_60px_rgba(0,0,0,0.18)]"
+          >
+            <div className="h-72 overflow-hidden bg-[#F4E8DA]">
+              <img
+                src={product.image || FALLBACK_IMG}
+                alt={product.name}
+                className="h-full w-full object-cover"
+                onError={(event) => {
+                  const img = event.currentTarget as HTMLImageElement;
+                  if (img.src !== FALLBACK_IMG) img.src = FALLBACK_IMG;
+                }}
+              />
+            </div>
 
-        <div className="flex flex-row flex-wrap items-center justify-center gap-4" style={{ marginTop: '280px' }}>
-          <Link
-            className="px-8 py-3 rounded-full bg-[#5D0F22] text-white font-semibold transition-all duration-300 hover:bg-[#4A0C1B] transform hover:scale-105 active:scale-95 shadow-lg shadow-[#5D0F22]/20 whitespace-nowrap"
-            to="/men"
-          >
-            رجالي
-          </Link>
-          <Link
-            className="px-8 py-3 rounded-full bg-[#5D0F22] text-white font-semibold transition-all duration-300 hover:bg-[#4A0C1B] transform hover:scale-105 active:scale-95 shadow-lg shadow-[#5D0F22]/20 whitespace-nowrap"
-            to="/women"
-          >
-            حريمي
-          </Link>
-          <Link
-            className="px-8 py-3 rounded-full bg-[#5D0F22] text-white font-semibold transition-all duration-300 hover:bg-[#4A0C1B] transform hover:scale-105 active:scale-95 shadow-lg shadow-[#5D0F22]/20 whitespace-nowrap"
-            to="/islamic"
-          >
-            إسلامي
-          </Link>
-        </div>
+            <div className="flex flex-1 flex-col justify-between p-5 text-right">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-[#4A0E17]">{product.tag || 'الأكثر مبيعاً'}</p>
+                <h3 className="mt-3 text-xl font-semibold text-[#4A0E17]">{product.name}</h3>
+                <p className="mt-2 text-sm leading-6 text-[#5A4A3F]">{product.subtitle}</p>
+              </div>
+
+              <div className="mt-5 flex items-center justify-between gap-3">
+                <span className="text-lg font-bold text-[#D4AF37]">{product.price?.toLocaleString()} ج.م</span>
+                <Link
+                  to={`/product/${product.id}`}
+                  className="inline-flex items-center justify-center rounded-full bg-[#4A0E17] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#3b0b12]"
+                >
+                  عرض
+                </Link>
+              </div>
+            </div>
+          </article>
+        ))}
       </div>
-
-      <footer className="bg-transparent text-on-tertiary-container py-4 border-t border-outline/10 w-full z-20 absolute bottom-4" dir="rtl">
-        <div className="px-margin-desktop max-w-container-max mx-auto flex justify-between items-center text-sm">
-          <div className="flex items-center gap-4">
-            <img
-              alt="Athar Logo"
-              className="h-6 w-auto opacity-80"
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuDPBx3FDnKHyIAGYg1cexhp1PiFI02DmHpX3kdsTszxTop1WWGAdMPDVfBKTOb_aa7xk06N8XvYYefXsI3-dMLc7XbYqa9DttdPrUGxbCoSJ5Y8aDVWya0NgwZViar8liSTX3QZ-9z1W7xgANzRk7NJFrX21QgsPgR1BMddxM4v1calcXDa-almOUotlKv-ajkyorPWN_4KkxW4PgANJ4TY1y4sJ5zqhT6oBkeEDoFXVratG4uD5VYnDyVIKVFWQcr9vVBrkd5SJi8e"
-            />
-            <span className="opacity-60">© 2024 أثر للتراث والفخامة</span>
-          </div>
-          <div className="flex gap-6 opacity-60">
-            <a className="hover:text-brand-gold transition-all" href="#">
-              إنستغرام
-            </a>
-            <a className="hover:text-brand-gold transition-all" href="#">
-              بينتريست
-            </a>
-          </div>
-        </div>
-      </footer>
     </section>
   );
+}
+
+export const Home: React.FC = () => {
+  const { categories } = useCart();
+  const categoriesList = Object.values(categories);
+
+  return (
+    <main className="min-h-screen bg-[#4A0E17]" dir="rtl">
+      <div className="max-w-container-max mx-auto px-4 py-10 lg:px-8 lg:py-14">
+        {categoriesList.map((category) => (
+          <CategorySection key={category.id} category={category} />
+        ))}
+      </div>
+    </main>
+  );
 };
+
+export default Home;

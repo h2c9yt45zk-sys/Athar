@@ -1,25 +1,26 @@
 import React from 'react';
-import { ProductService } from '../services/productService';
 import { ProductList } from '../components/ProductList';
+import { useCart } from '../contexts/CartContext';
 
 export const MenCollection: React.FC = () => {
-  const categoryInfo = ProductService.getCategoryInfo('men');
-  const products = ProductService.getProductsByCategory('men');
+  const { categories, products } = useCart();
+  const categoryInfo = categories.men;
+  const visibleProducts = products.filter((product) => product.category === 'men');
 
   return (
-    <main className="pt-32 pb-section-gap px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto">
+    <main className="pt-32 pb-section-gap px-margin-mobile md:px-margin-desktop max-w-container-max mx-auto bg-[#4A0E17] text-[#F7E7CC]">
       {/* Hero Header */}
       <header className="mb-section-gap text-right">
-        <h1 className="font-arabic-serif text-6xl md:text-8xl text-brand-burgundy mb-4 leading-tight">
+        <h1 className="font-arabic-serif text-6xl md:text-8xl text-[#D4AF37] mb-4 leading-tight">
           {categoryInfo.title}
         </h1>
-        <p className="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mr-0">
+        <p className="font-body-lg text-body-lg text-[#F7E7CC] max-w-2xl mr-0">
           {categoryInfo.description}
         </p>
       </header>
 
       {/* Product Grid */}
-      <ProductList products={products} />
+      <ProductList products={visibleProducts} />
 
       {/* Pagination / Load More */}
       <div className="mt-section-gap flex justify-center">

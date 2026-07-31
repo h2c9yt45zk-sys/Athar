@@ -1,8 +1,8 @@
 :root {
-  --brand-burgundy: #5D0F22;
-  --brand-gold: #c5a065;
-  --surface-bg: #fdfaf6;
-  --on-surface: #191c1d;
+  --brand-burgundy: #4A0E17;
+  --brand-gold: #D4AF37;
+  --surface-bg: #4A0E17;
+  --on-surface: #F7E7CC;
 }
 
 body {
@@ -10,6 +10,33 @@ body {
   color: var(--on-surface);
   font-family: 'Noto Serif Arabic', serif;
   overflow-x: hidden;
+}
+
+/* Ensure full-bleed burgundy from the very edge */
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+}
+
+/* Force full-bleed burgundy across the entire viewport and root */
+html, body, #root, #root > div {
+  background-color: #4A0E17 !important;
+  min-height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+  overflow-x: hidden !important;
+}
+
+/* Ensure box-sizing so padding doesn't cause overflow */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+main {
+  background: transparent;
 }
 
 .watermark {

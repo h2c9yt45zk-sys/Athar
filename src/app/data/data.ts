@@ -135,3 +135,25 @@ export const FEATURED_PRODUCT: Product = {
     'https://lh3.googleusercontent.com/aida-public/AB6AXuDv5mIRNqxIsWKvVMQeMICfh6x6tnbZkkWwFFreVaQo3sHg2xpk_EcCbr5MSkUX7xxetFJVkH9H_G4-4C2FqctlW1KAS1DIRy5o-UzP0e1PCdR_McO2fEDlnmO3CStnHuJKqF0GEYN8yIMUhkUjUSaBqrg2OoNQM3Dz7KdRInS6BR6V6TpOVeWkmO1ng8wQ-YUeUIywyDFS6GnIssx9Bg-be90ThlPijNeWMdiG0zFkBNvMcLRIDDhDGdVnP3CVlQIrCO2bS82z5GsR'
   ]
 };
+
+export const getCatalogProducts = () => PRODUCTS;
+export const getCatalogCategories = () => CATEGORIES;
+
+export const updateCategoryInfo = (categoryId: string, updates: Partial<CategoryInfo>) => {
+  if (!CATEGORIES[categoryId]) return;
+  CATEGORIES[categoryId] = {
+    ...CATEGORIES[categoryId],
+    ...updates,
+  };
+};
+
+export const upsertProduct = (product: Product) => {
+  const existingIndex = PRODUCTS.findIndex((item) => item.id === product.id);
+  if (existingIndex >= 0) {
+    PRODUCTS.splice(existingIndex, 1, product);
+    return;
+  }
+
+  PRODUCTS.unshift(product);
+};
+
