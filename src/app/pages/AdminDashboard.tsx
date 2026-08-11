@@ -1,0 +1,939 @@
+import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useCart } from '../contexts/CartContext';
+import { Product, CategoryInfo, PaymentStatus } from '../types';
+import {
+  BadgeCheck,
+  BarChart3,
+  Clock3,
+  Copy,
+  CreditCard,
+  Eye,
+  ExternalLink,
+  PencilLine,
+  Plus,
+  Search,
+  ShoppingBag,
+  Store,
+  X,
+} from 'lucide-react';
+
+type OrderStatus = 'قيد الانتظار' | 'قيد التجهيز' | 'تم الشحن' | 'تم التوصيل';
+
+type OrderItem = {
+  name: string;
+  size: string;
+  quantity: number;
+  price: number;
+};
+
+type Order = {
+  id: string;
+  orderCode: string;
+  customerName: string;
+  phone: string;
+  address: string;
+  notes?: string;
+  total: number;
+  status: OrderStatus;
+  createdAt: string;
+  items: OrderItem[];
+  paymentMethod: 'الدفع عند الاستلام' | 'دفع إلكتروني';
+  electronicMethod?: 'إنستا باي' | 'فودافون كاش';
+  screenshotUrl?: string;
+  paymentStatus: PaymentStatus;
+};
+
+type CategoryKey = 'women' | 'men' | 'islamic';
+
+type ProductFormState = {
+  id: string;
+  name: string;
+  category: CategoryKey;
+  price: number;
+  description: string;
+  imageUrl: string;
+  sizes: string;
+  colors: string;
+};
+
+const sidebarItems: Array<{ key: 'orders' | 'store'; label: string; icon: typeof BarChart3 }> = [
+  { key: 'orders', label: 'الطلبات والإحصائيات', icon: BarChart3 },
+  { key: 'store', label: 'إدارة المتجر', icon: Store },
+];
+
+const statusClasses: Record<OrderStatus, string> = {
+  'قيد الانتظار': 'bg-amber-500/15 text-amber-200 border-amber-400/30',
+  'قيد التجهيز': 'bg-sky-500/15 text-sky-200 border-sky-400/30',
+  'تم الشحن': 'bg-violet-500/15 text-violet-200 border-violet-400/30',
+  'تم التوصيل': 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30',
+};
+
+const paymentStatusClasses: Record<PaymentStatus, string> = {
+  'جاري الفحص': 'bg-amber-500/15 text-amber-200 border-amber-400/30',
+  'تم القبول': 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30',
+  'خطأ في الدفع': 'bg-rose-500/15 text-rose-200 border-rose-400/30',
+};
+
+const orderStatusTabs: Array<{ label: string; value: 'الكل' | OrderStatus }> = [
+  { label: 'الكل', value: 'الكل' },
+  { label: 'المعلقة', value: 'قيد الانتظار' },
+  { label: 'جاري التجهيز', value: 'قيد التجهيز' },
+  { label: 'تم الشحن', value: 'تم الشحن' },
+];
+
+const paymentStatusTabs: PaymentStatus[] = ['جاري الفحص', 'تم القبول', 'خطأ في الدفع'];
+
+const categoryTabs: Array<{ key: CategoryKey; label: string }> = [
+  { key: 'men', label: 'رجالي' },
+  { key: 'women', label: 'نسائي' },
+  { key: 'islamic', label: 'إسلامي' },
+];
+
+const normalizeOrderCode = (value?: string | null) => {
+  if (value === undefined || value === null) {
+    return '';
+  }
+
+  return String(value)
+    .replace(/^#/, '')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[^A-Za-z0-9-]/g, '')
+    .trim()
+    .toUpperCase();
+};
+
+const emptyProductForm = (category: CategoryKey): ProductFormState => ({
+  id: '',
+  name: '',
+  category,
+  price: 0,
+  description: '',
+  imageUrl: '',
+  sizes: '',
+  colors: '',
+});
+
+export default function AdminDashboard() {
+  const { orders, setOrders, products, setProducts, categories, setCategories } = useCart();
+  const [activeTab, setActiveTab] = useState<'orders' | 'store'>('orders');
+  const [selectedOrderId, setSelectedOrderId] = useState<string>(orders[0]?.id ?? '');
+  const [selectedCategory, setSelectedCategory] = useState<CategoryKey>('men');
+  const [selectedOrderTab, setSelectedOrderTab] = useState<'الكل' | OrderStatus>('الكل');
+  const [orderSort, setOrderSort] = useState<'newest' | 'highestPrice' | 'nearest'>('newest');
+  const [orderSearch, setOrderSearch] = useState('');
+  const [submittedOrderCode, setSubmittedOrderCode] = useState('');
+  const [ordersSectionTab, setOrdersSectionTab] = useState<'active' | 'history'>('active');
+  const [deliveryConfirmOrderId, setDeliveryConfirmOrderId] = useState<string | null>(null);
+  const [copyMessage, setCopyMessage] = useState<string>('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [productForm, setProductForm] = useState<ProductFormState>(emptyProductForm('men'));
+  const [imagePreview, setImagePreview] = useState<string>('');
+  const [imageUploadFile, setImageUploadFile] = useState<File | null>(null);
+
+  const selectedCollection = categories[selectedCategory] ?? categories.women;
+  const visibleProducts = useMemo(() => products.filter((product) => product.category === selectedCategory), [products, selectedCategory]);
+
+  const filteredOrders = useMemo(() => {
+    const nearbyPriority = ['الرياض', 'جدة', 'الدمام', 'مكة المكرمة', 'الشرقية', 'الخبر', 'الظهران'];
+    const normalizedSearch = normalizeOrderCode(submittedOrderCode);
+
+    return orders
+      .filter((order) => order.status !== 'تم التوصيل')
+      .filter((order) => (selectedOrderTab === 'الكل' ? true : order.status === selectedOrderTab))
+      .filter((order) => {
+        if (!normalizedSearch) return true;
+        return normalizeOrderCode(order.orderCode) === normalizedSearch;
+      })
+      .sort((a, b) => {
+        if (orderSort === 'highestPrice') {
+          return b.total - a.total;
+        }
+        if (orderSort === 'nearest') {
+          const aPriority = nearbyPriority.findIndex((city) => a.address.includes(city));
+          const bPriority = nearbyPriority.findIndex((city) => b.address.includes(city));
+          const aIndex = aPriority === -1 ? 999 : aPriority;
+          const bIndex = bPriority === -1 ? 999 : bPriority;
+          return aIndex - bIndex;
+        }
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+  }, [orders, selectedOrderTab, orderSort]);
+
+  const historyOrders = useMemo(
+    () => orders.filter((order) => order.status === 'تم التوصيل').sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [orders]
+  );
+
+  const searchedOrders = useMemo(() => {
+    const normalizedSearch = normalizeOrderCode(submittedOrderCode);
+
+    if (!normalizedSearch) {
+      return [];
+    }
+
+    return orders.filter((order) => normalizeOrderCode(order.orderCode) === normalizedSearch);
+  }, [orders, submittedOrderCode]);
+
+  const currentOrders = submittedOrderCode ? searchedOrders : ordersSectionTab === 'active' ? filteredOrders : historyOrders;
+  const selectedOrder = currentOrders.find((order) => order.id === selectedOrderId) ?? currentOrders[0] ?? null;
+
+  useEffect(() => {
+    const ordersToCheck = submittedOrderCode ? searchedOrders : ordersSectionTab === 'active' ? filteredOrders : historyOrders;
+    if (ordersToCheck.length > 0 && !ordersToCheck.some((order) => order.id === selectedOrderId)) {
+      setSelectedOrderId(ordersToCheck[0].id);
+    }
+  }, [filteredOrders, historyOrders, searchedOrders, ordersSectionTab, selectedOrderId, submittedOrderCode, orders]);
+
+  useEffect(() => {
+    return () => {
+      if (imagePreview.startsWith('blob:')) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
+  }, [imagePreview]);
+
+  const handleOrderSearch = () => {
+    const normalized = normalizeOrderCode(orderSearch);
+    setSubmittedOrderCode(normalized);
+    setSelectedOrderId('');
+  };
+
+  const clearOrderSearch = () => {
+    setOrderSearch('');
+    setSubmittedOrderCode('');
+  };
+
+  const copyShippingDetails = (order: Order) => {
+    const details = `رمز الطلب: ${order.orderCode || order.id}\nالعميل: ${order.customerName}\nالهاتف: ${order.phone}\nالعنوان: ${order.address}\nالإجمالي: ${order.total} ر.س`;
+    navigator.clipboard
+      .writeText(details)
+      .then(() => {
+        setCopyMessage('تم نسخ تفاصيل الشحن');
+        window.setTimeout(() => setCopyMessage(''), 1800);
+      })
+      .catch(() => {
+        setCopyMessage('فشل نسخ التفاصيل');
+        window.setTimeout(() => setCopyMessage(''), 1800);
+      });
+  };
+
+  const handleImageUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const previewUrl = URL.createObjectURL(file);
+    setImageUploadFile(file);
+    setImagePreview(previewUrl);
+    setProductForm((prev) => ({ ...prev, imageUrl: previewUrl }));
+  };
+
+  const quickStats = [
+    { label: 'إجمالي الطلبات', value: '128', icon: ShoppingBag },
+    { label: 'طلبات معلقة', value: '14', icon: Clock3 },
+    { label: 'الإيرادات', value: '١٢٫٨٧٥ ر.س', icon: CreditCard },
+  ];
+
+  const handleCollectionChange = (id: string, field: keyof CategoryInfo, value: string) => {
+    const categoryKey = id as CategoryKey;
+    setCategories((prev) => ({
+      ...prev,
+      [categoryKey]: {
+        ...prev[categoryKey],
+        [field]: value,
+      },
+    }));
+  };
+
+  const updateOrderStatus = (orderId: string, status: OrderStatus) => {
+    setOrders((prev) => prev.map((order) => (order.id === orderId ? { ...order, status } : order)));
+  };
+
+  const updatePaymentStatus = (orderId: string, paymentStatus: PaymentStatus) => {
+    setOrders((prev) => prev.map((order) => (order.id === orderId ? { ...order, paymentStatus } : order)));
+  };
+
+  const requestDeliveryConfirmation = (orderId: string) => {
+    setDeliveryConfirmOrderId(orderId);
+  };
+
+  const confirmDeliveryStatus = () => {
+    if (!deliveryConfirmOrderId) return;
+    setOrders((prev) => prev.map((order) => (order.id === deliveryConfirmOrderId ? { ...order, status: 'تم التوصيل' } : order)));
+    setDeliveryConfirmOrderId(null);
+  };
+
+  const cancelDeliveryConfirmation = () => {
+    setDeliveryConfirmOrderId(null);
+  };
+
+  const restoreOrder = (orderId: string, status: 'قيد الانتظار' | 'قيد التجهيز' | 'تم الشحن') => {
+    setOrders((prev) => prev.map((order) => (order.id === orderId ? { ...order, status } : order)));
+  };
+
+  const openAddModal = () => {
+    setEditingProductId(null);
+    setProductForm(emptyProductForm(selectedCategory));
+    setImagePreview('');
+    setImageUploadFile(null);
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (product: Product) => {
+    setEditingProductId(product.id);
+    setProductForm({
+      id: product.id,
+      name: product.name,
+      category: product.category,
+      price: product.price,
+      description: product.description ?? '',
+      imageUrl: product.image,
+      sizes: (product.sizes ?? []).join(', '),
+      colors: (product.colors ?? []).join(', '),
+    });
+    setImagePreview(product.image);
+    setImageUploadFile(null);
+    setIsModalOpen(true);
+  };
+
+  const saveProduct = () => {
+    const normalizedSizes = productForm.sizes
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    const normalizedColors = productForm.colors
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    const productPayload: Product = {
+      id: editingProductId ?? `p-${Date.now()}`,
+      name: productForm.name.trim() || 'منتج جديد',
+      subtitle: productForm.description.trim() || productForm.name.trim() || 'قطعة فاخرة',
+      category: productForm.category,
+      price: Number(productForm.price) || 0,
+      description: productForm.description.trim(),
+      image: productForm.imageUrl.trim() || 'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=900&q=80',
+      sizes: normalizedSizes,
+      colors: normalizedColors,
+    };
+
+    setProducts((prev) => {
+      if (editingProductId) {
+        return prev.map((product) => (product.id === editingProductId ? productPayload : product));
+      }
+      return [productPayload, ...prev];
+    });
+
+    setIsModalOpen(false);
+    setSelectedCategory(productPayload.category);
+  };
+
+  return (
+    <div dir="rtl" className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(90,24,39,0.34),_transparent_30%),linear-gradient(135deg,_#050505_0%,_#11070c_45%,_#080505_100%)] text-[#f7e7dc]">
+      <div className="mx-auto flex max-w-7xl flex-col lg:flex-row">
+        <aside className="w-full border-b border-white/10 bg-[#14090f]/80 p-6 backdrop-blur-xl lg:w-72 lg:border-b-0 lg:border-l lg:border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#c8914f]/30 bg-[#c8914f]/10 text-[#f3ce90]">
+              <BadgeCheck className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.35em] text-[#c8914f]">Athar</p>
+              <h2 className="text-lg font-semibold text-white">لوحة الإدارة</h2>
+            </div>
+          </div>
+
+          <nav className="mt-8 space-y-2">
+            {sidebarItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.key;
+              return (
+                <button
+                  key={item.key}
+                  className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-right text-sm transition ${
+                    isActive ? 'bg-[#8b1f3f] text-white shadow-lg shadow-[#8b1f3f]/20' : 'bg-white/5 text-[#f4dfc9] hover:bg-white/10'
+                  }`}
+                  onClick={() => setActiveTab(item.key)}
+                  type="button"
+                >
+                  <span>{item.label}</span>
+                  <Icon className="h-4 w-4" />
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="mt-8 rounded-3xl border border-[#c8914f]/20 bg-[#1f0f16]/80 p-4">
+            <p className="text-[10px] uppercase tracking-[0.3em] text-[#c8914f]">ملاحظة سريعة</p>
+            <p className="mt-2 text-sm leading-7 text-[#f2e0ce]">تابع الطلبات اليومية وحافظ على هوية المتجر الراقية في كل قسم.</p>
+          </div>
+        </aside>
+
+        <main className="flex-1 pt-20 p-6 lg:pt-24 lg:p-8">
+          {activeTab === 'orders' && (
+            <section className="mt-6 space-y-6">
+              <div className="grid gap-4 md:grid-cols-3">
+                {quickStats.map((stat) => {
+                  const Icon = stat.icon;
+                  return (
+                    <article key={stat.label} className="rounded-[24px] border border-white/10 bg-[#14090f]/80 p-5 shadow-[0_16px_60px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm text-[#f2e1d0]">{stat.label}</p>
+                        <div className="rounded-2xl border border-[#c8914f]/20 bg-[#c8914f]/10 p-2 text-[#f3ce90]">
+                          <Icon className="h-4 w-4" />
+                        </div>
+                      </div>
+                      <p className="mt-4 text-3xl font-semibold text-white">{stat.value}</p>
+                    </article>
+                  );
+                })}
+              </div>
+
+              <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+                <div className="rounded-[28px] border border-white/10 bg-[#12070d]/70 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.3)] backdrop-blur-xl">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm uppercase tracking-[0.3em] text-[#c8914f]">الطلبات</p>
+                      <h2 className="mt-1 text-2xl font-semibold text-white">إدارة الطلبات الحالية</h2>
+                    </div>
+                    <div className="rounded-full border border-[#c8914f]/20 bg-[#c8914f]/10 px-3 py-2 text-sm text-[#f3ce90]">{orders.length} طلب</div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <button
+                        type="button"
+                        onClick={() => setOrdersSectionTab('active')}
+                        className={`rounded-full px-4 py-2 text-sm transition ${ordersSectionTab === 'active' ? 'bg-[#8b1f3f] text-white shadow-lg shadow-[#8b1f3f]/20' : 'bg-white/5 text-[#f2e1d0] hover:bg-white/10'}`}
+                      >
+                        الطلبات النشطة
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setOrdersSectionTab('history')}
+                        className={`rounded-full px-4 py-2 text-sm transition ${ordersSectionTab === 'history' ? 'bg-[#8b1f3f] text-white shadow-lg shadow-[#8b1f3f]/20' : 'bg-white/5 text-[#f2e1d0] hover:bg-white/10'}`}
+                      >
+                        سجل الطلبات
+                      </button>
+                    </div>
+
+                    {ordersSectionTab === 'active' ? (
+                      <>
+                        <div className="grid gap-4 md:grid-cols-[1.25fr_0.75fr]">
+                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                            <p className="text-xs uppercase tracking-[0.25em] text-[#c8914f]">ترتيب حسب</p>
+                            <select
+                              value={orderSort}
+                              onChange={(event) => setOrderSort(event.target.value as 'newest' | 'highestPrice' | 'nearest')}
+                              className="mt-3 w-full rounded-2xl border border-white/10 bg-[#12070d]/70 px-4 py-3 text-sm text-white outline-none transition focus:border-[#c8914f]"
+                            >
+                              <option value="newest">الأحدث</option>
+                              <option value="highestPrice">الأكثر سعراً</option>
+                              <option value="nearest">الأقرب</option>
+                            </select>
+                          </div>
+
+                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                            <p className="text-xs uppercase tracking-[0.25em] text-[#c8914f]">حالة الطلب</p>
+                            <select
+                              value={selectedOrderTab}
+                              onChange={(event) => setSelectedOrderTab(event.target.value as 'الكل' | OrderStatus)}
+                              className="mt-3 w-full rounded-2xl border border-white/10 bg-[#12070d]/70 px-4 py-3 text-sm text-white outline-none transition focus:border-[#c8914f]"
+                            >
+                              {orderStatusTabs.map((tab) => (
+                                <option key={tab.value} value={tab.value} className="bg-[#12070d] text-white">
+                                  {tab.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-xs uppercase tracking-[0.25em] text-[#c8914f]">البحث برمز الطلب</p>
+                          <div className="mt-3 flex flex-col gap-3 md:flex-row">
+                            <input
+                              value={orderSearch}
+                              onChange={(event) => setOrderSearch(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key === 'Enter') {
+                                  handleOrderSearch();
+                                }
+                              }}
+                              placeholder="اكتب رمز الطلب مثل #ATHAR-1045"
+                              className="w-full rounded-2xl border border-white/10 bg-[#12070d]/70 px-4 py-3 text-sm text-white outline-none transition focus:border-[#c8914f]"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleOrderSearch}
+                              className="inline-flex items-center justify-center gap-2 rounded-full bg-[#8b1f3f] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#a32648]"
+                            >
+                              <Search className="h-4 w-4" />
+                              بحث
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-2xl border border-white/10 bg-[#12070d]/70 px-4 py-3 text-sm text-[#f2e1d0]">
+                            {filteredOrders.length} طلب متاح حالياً
+                          </div>
+                          <div className="rounded-2xl border border-white/10 bg-[#12070d]/70 px-4 py-3 text-sm text-[#f2e1d0]">
+                            {selectedOrderTab === 'الكل' ? 'كل الحالات' : `حالة: ${orderStatusTabs.find((tab) => tab.value === selectedOrderTab)?.label}`}
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-[#f2e1d0]">
+                        هنا يظهر سجل الطلبات التي تم تسليمها. استخدم الأزرار أدناه لاستعادة أي طلب إلى حالة نشطة.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 space-y-3">
+                    {currentOrders.length ? (
+                      currentOrders.map((order) => (
+                        <button
+                          key={order.id}
+                          className={`w-full rounded-2xl border p-4 text-right transition ${selectedOrderId === order.id ? 'border-[#c8914f]/40 bg-[#2b1119]' : 'border-white/10 bg-black/20 hover:bg-white/5'}`}
+                          onClick={() => setSelectedOrderId(order.id)}
+                          type="button"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-white">{order.orderCode || 'رمز غير متوفر'}</p>
+                              <p className="mt-1 text-sm text-[#f2e1d0]">{order.customerName}</p>
+                            </div>
+                            <div className="text-sm text-[#f2e1d0]">
+                              <p>{order.phone}</p>
+                              <p>{order.address}</p>
+                            </div>
+                            <div className="text-left">
+                              <p className="font-semibold text-white">{order.total.toLocaleString()} ر.س</p>
+                              <p className={`mt-1 inline-flex rounded-full border px-3 py-1 text-xs ${statusClasses[order.status]}`}>{order.status}</p>
+                            </div>
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-6 text-center text-sm text-[#f2e1d0]">
+                        {submittedOrderCode ? 'لا توجد نتائج مطابقة لهذا الكود' : 'لا توجد طلبات متاحة لهذه الفلاتر، حاول تغيير الحالة أو الفلتر.'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {selectedOrder ? (
+                  <div className="rounded-[28px] border border-white/10 bg-[#14090f]/80 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.3)] backdrop-blur-xl">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm uppercase tracking-[0.3em] text-[#c8914f]">تفاصيل الطلب</p>
+                        <h3 className="mt-1 text-xl font-semibold text-white">#{normalizeOrderCode(selectedOrder.orderCode) || 'رمز غير متوفر'}</h3>
+                      </div>
+                      <div className="rounded-2xl border border-[#c8914f]/20 bg-[#c8914f]/10 p-2 text-[#f3ce90]">
+                        <Eye className="h-4 w-4" />
+                      </div>
+                    </div>
+
+                    <div className="mt-6 space-y-4">
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <p className="text-sm text-[#f2e1d0]">العميل</p>
+                        <p className="mt-1 font-semibold text-white">{selectedOrder.customerName}</p>
+                        <p className="mt-1 text-sm text-[#f2e1d0]">{selectedOrder.phone}</p>
+                        <p className="mt-1 text-sm text-[#f2e1d0]">{selectedOrder.address}</p>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm text-[#f2e1d0]">تفاصيل الشحن</p>
+                            <p className="mt-1 text-sm text-[#f2e1d0]">نسخ بيانات العميل بسرعة لخدمة التوصيل.</p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => copyShippingDetails(selectedOrder)}
+                            className="inline-flex items-center gap-2 rounded-full bg-[#8b1f3f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#a32648]"
+                          >
+                            <Copy className="h-4 w-4" /> نسخ تفاصيل الشحن
+                          </button>
+                        </div>
+                        {copyMessage && <p className="mt-3 text-sm text-[#c8914f]">{copyMessage}</p>}
+                      </div>
+
+                      <div>
+                        <p className="text-sm text-[#f2e1d0]">المشتريات</p>
+                        <div className="mt-3 space-y-2">
+                          {selectedOrder.items.map((item, index) => (
+                            <div key={`${selectedOrder.id}-${index}`} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-3 py-3">
+                              <div>
+                                <p className="font-medium text-white">{item.name}</p>
+                                <p className="text-sm text-[#f2e1d0]">المقاس: {item.size} • الكمية: {item.quantity}</p>
+                              </div>
+                              <p className="font-semibold text-[#f3ce90]">{item.price} ر.س</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <p className="text-sm text-[#f2e1d0]">الدفع</p>
+                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                          <div className="rounded-2xl border border-white/10 bg-black/20 p-3 text-sm text-[#f2e1d0]">
+                            <p className="text-xs uppercase tracking-[0.25em] text-[#c8914f]">طريقة الدفع</p>
+                            <p className="mt-2 text-white">{selectedOrder.paymentMethod}{selectedOrder.electronicMethod ? ` - ${selectedOrder.electronicMethod}` : ''}</p>
+                          </div>
+                          <div className="rounded-2xl border border-white/10 bg-black/20 p-3 text-sm text-[#f2e1d0]">
+                            <p className="text-xs uppercase tracking-[0.25em] text-[#c8914f]">حالة الدفع</p>
+                            <p className={`mt-2 inline-flex rounded-full border px-3 py-1 text-xs ${paymentStatusClasses[selectedOrder.paymentStatus]}`}>{selectedOrder.paymentStatus}</p>
+                          </div>
+                        </div>
+
+                        {selectedOrder.screenshotUrl ? (
+                          <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-3">
+                            <p className="text-sm text-[#f2e1d0]">لقطة الشاشة</p>
+                            <a href={selectedOrder.screenshotUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-2 rounded-full bg-[#8b1f3f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#a32648]">
+                              <Eye className="h-4 w-4" /> عرض الصورة كاملة
+                            </a>
+                          </div>
+                        ) : (
+                          <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-3 text-sm text-[#f2e1d0]">لا يوجد لقطة شاشة مرفوعة لهذا الطلب.</div>
+                        )}
+
+                        <div className="mt-4">
+                          <p className="text-sm text-[#f2e1d0]">تحديث حالة الدفع</p>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {paymentStatusTabs.map((status) => (
+                              <button
+                                key={status}
+                                type="button"
+                                onClick={() => updatePaymentStatus(selectedOrder.id, status)}
+                                className={`rounded-full border px-3 py-2 text-sm transition ${selectedOrder.paymentStatus === status ? 'border-[#c8914f] bg-[#c8914f]/15 text-[#f3ce90]' : 'border-white/10 text-[#f2e1d0] hover:bg-white/5'}`}
+                              >
+                                {status}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                        <p className="text-sm text-[#f2e1d0]">تغيير حالة الطلب</p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {(['قيد الانتظار', 'قيد التجهيز', 'تم الشحن', 'تم التوصيل'] as OrderStatus[]).map((status) => (
+                            <button
+                              key={status}
+                              className={`rounded-full border px-3 py-2 text-sm transition ${selectedOrder.status === status ? 'border-[#c8914f] bg-[#c8914f]/15 text-[#f3ce90]' : 'border-white/10 text-[#f2e1d0] hover:bg-white/5'}`}
+                              onClick={() => updateOrderStatus(selectedOrder.id, status)}
+                              type="button"
+                            >
+                              {status}
+                            </button>
+                          ))}
+                        </div>
+
+                        {ordersSectionTab === 'history' && selectedOrder.status === 'تم التوصيل' ? (
+                          <div className="mt-4 flex flex-wrap gap-3">
+                            <button
+                              type="button"
+                              onClick={() => restoreOrder(selectedOrder.id, 'قيد التجهيز')}
+                              className="rounded-full bg-[#8b1f3f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#a32648]"
+                            >
+                              استعادة الطلب إلى قيد التجهيز
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {ordersSectionTab === 'active' && selectedOrder.status !== 'تم التوصيل' ? (
+                        <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-sm text-[#f2e1d0]">تأكيد التسليم</p>
+                          <button
+                            type="button"
+                            onClick={() => requestDeliveryConfirmation(selectedOrder.id)}
+                            className="mt-3 rounded-full bg-[#8b1f3f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#a32648]"
+                          >
+                            وضع الطلب في التاريخ بعد التسليم
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-[28px] border border-white/10 bg-[#14090f]/80 p-6 text-center text-sm text-[#f2e1d0] shadow-[0_24px_80px_rgba(0,0,0,0.3)] backdrop-blur-xl">
+                    لا توجد نتائج مطابقة لهذا الكود
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {activeTab === 'store' && (
+            <section className="mt-6 space-y-6">
+              <div className="rounded-[28px] border border-white/10 bg-[#12070d]/70 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.3)] backdrop-blur-xl">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-sm uppercase tracking-[0.3em] text-[#c8914f]">إدارة المتجر</p>
+                    <h2 className="mt-1 text-2xl font-semibold text-white">إدارة الأقسام والمنتجات في مكان واحد</h2>
+                  </div>
+                  <button
+                    className="flex items-center gap-2 rounded-full bg-[#8b1f3f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#a32648]"
+                    onClick={openAddModal}
+                    type="button"
+                  >
+                    <Plus className="h-4 w-4" />
+                    إضافة منتج جديد +
+                  </button>
+                </div>
+
+                <div className="mt-6 flex flex-wrap gap-2">
+                  {categoryTabs.map((category) => (
+                    <button
+                      key={category.key}
+                      className={`rounded-full border px-4 py-2 text-sm transition ${selectedCategory === category.key ? 'border-[#c8914f] bg-[#c8914f]/15 text-[#f3ce90]' : 'border-white/10 bg-black/20 text-[#f2e1d0] hover:bg-white/5'}`}
+                      onClick={() => setSelectedCategory(category.key)}
+                      type="button"
+                    >
+                      {category.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-[28px] border border-white/10 bg-[#14090f]/80 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.3)] backdrop-blur-xl">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-sm uppercase tracking-[0.3em] text-[#c8914f]">رأس القسم</p>
+                    <h3 className="mt-1 text-xl font-semibold text-white">{selectedCollection.title}</h3>
+                    <p className="mt-2 max-w-2xl text-sm leading-7 text-[#f2e1d0]">{selectedCollection.description}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="rounded-2xl border border-[#c8914f]/20 bg-[#c8914f]/10 px-3 py-2 text-sm text-[#f3ce90]">تعديل المحتوى</div>
+                    <Link
+                      to={selectedCategory === 'women' ? '/women' : selectedCategory === 'men' ? '/men' : '/islamic'}
+                      className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-[#f2e1d0] transition hover:bg-white/10"
+                    >
+                      <ExternalLink className="h-4 w-4" /> معاينة الصفحة
+                    </Link>
+                  </div>
+                </div>
+
+                <div className="mt-6 grid gap-4 lg:grid-cols-2">
+                  <label className="block text-sm text-[#f2e1d0]">
+                    <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-[#c8914f]">عنوان القسم</span>
+                    <input
+                      className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition focus:border-[#c8914f]"
+                      onChange={(event) => handleCollectionChange(selectedCollection.id, 'title', event.target.value)}
+                      value={selectedCollection.title}
+                    />
+                  </label>
+
+                  <label className="block text-sm text-[#f2e1d0]">
+                    <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-[#c8914f]">وصف القسم</span>
+                    <textarea
+                      className="min-h-[96px] w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition focus:border-[#c8914f]"
+                      onChange={(event) => handleCollectionChange(selectedCollection.id, 'description', event.target.value)}
+                      value={selectedCollection.description}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                {visibleProducts.map((product) => (
+                  <article key={product.id} className="group relative overflow-hidden rounded-[28px] border border-white/10 bg-[#1a0d13]/90 shadow-[0_18px_60px_rgba(0,0,0,0.28)] transition duration-300 hover:-translate-y-1 hover:border-[#c8914f]/40">
+                    <img alt={product.name} className="h-48 w-full object-cover" src={product.image} />
+                    <div className="absolute left-4 top-4 flex gap-2">
+                      <button
+                        className="rounded-full border border-[#c8914f]/30 bg-[#14090f]/90 p-2 text-[#f3ce90] shadow-lg transition hover:scale-105"
+                        onClick={() => openEditModal(product)}
+                        type="button"
+                        title="تعديل"
+                      >
+                        <PencilLine className="h-4 w-4" />
+                      </button>
+                      <Link
+                        to={`/product/${product.id}`}
+                        className="rounded-full border border-[#c8914f]/30 bg-[#14090f]/90 p-2 text-[#f3ce90] shadow-lg transition hover:scale-105"
+                        title="معاينة الصفحة"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Link>
+                    </div>
+                    <div className="p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[11px] uppercase tracking-[0.28em] text-[#c8914f]">{product.category}</p>
+                          <h3 className="mt-1 text-lg font-semibold text-white">{product.name}</h3>
+                        </div>
+                        <div className="rounded-full bg-[#8b1f3f]/20 px-3 py-1 text-sm font-semibold text-[#f3ce90]">{product.price} ر.س</div>
+                      </div>
+                      <p className="mt-3 text-sm leading-7 text-[#f2e1d0]">{product.description}</p>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {(product.sizes ?? []).map((size) => (
+                          <span key={size} className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs text-[#f2e1d0]">
+                            {size}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {(product.colors ?? []).map((color) => (
+                          <span key={color} className="rounded-full border border-[#c8914f]/20 bg-[#c8914f]/10 px-3 py-1 text-xs text-[#f3ce90]">
+                            {color}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+        </main>
+      </div>
+
+      {deliveryConfirmOrderId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#150a10] p-6 shadow-[0_24px_90px_rgba(0,0,0,0.45)]">
+            <div className="mb-4">
+              <h3 className="text-xl font-semibold text-white">تأكيد التسليم</h3>
+              <p className="mt-2 text-sm leading-6 text-[#f2e1d0]">هل أنت متأكد من أنه تم تسليم هذا الطلب؟ سيتم نقله إلى سجل الطلبات.</p>
+            </div>
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={confirmDeliveryStatus}
+                className="rounded-full bg-[#8b1f3f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#a32648]"
+              >
+                نعم، تأكيد التسليم
+              </button>
+              <button
+                type="button"
+                onClick={cancelDeliveryConfirmation}
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-[#f2e1d0] transition hover:bg-white/10"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-[28px] border border-white/10 bg-[#150a10] p-6 shadow-[0_24px_90px_rgba(0,0,0,0.45)]">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-[0.3em] text-[#c8914f]">{editingProductId ? 'تعديل المنتج' : 'إضافة منتج جديد'}</p>
+                <h3 className="mt-1 text-2xl font-semibold text-white">تفاصيل المنتج</h3>
+              </div>
+              <button className="rounded-full border border-white/10 bg-white/5 p-2 text-[#f2e1d0]" onClick={() => setIsModalOpen(false)} type="button">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <label className="block text-sm text-[#f2e1d0]">
+                <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-[#c8914f]">اسم المنتج</span>
+                <input
+                  className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition focus:border-[#c8914f]"
+                  onChange={(event) => setProductForm((prev) => ({ ...prev, name: event.target.value }))}
+                  value={productForm.name}
+                />
+              </label>
+
+              <label className="block text-sm text-[#f2e1d0]">
+                <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-[#c8914f]">السعر</span>
+                <input
+                  className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition focus:border-[#c8914f]"
+                  onChange={(event) => setProductForm((prev) => ({ ...prev, price: Number(event.target.value) }))}
+                  type="number"
+                  value={productForm.price}
+                />
+              </label>
+
+              <label className="block text-sm text-[#f2e1d0] md:col-span-2">
+                <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-[#c8914f]">الوصف</span>
+                <textarea
+                  className="min-h-[100px] w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition focus:border-[#c8914f]"
+                  onChange={(event) => setProductForm((prev) => ({ ...prev, description: event.target.value }))}
+                  value={productForm.description}
+                />
+              </label>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="block text-sm text-[#f2e1d0]">
+                  <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-[#c8914f]">رابط الصورة</span>
+                  <input
+                    className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition focus:border-[#c8914f]"
+                    onChange={(event) => setProductForm((prev) => ({ ...prev, imageUrl: event.target.value }))}
+                    value={productForm.imageUrl}
+                  />
+                </label>
+
+                <label className="block text-sm text-[#f2e1d0]">
+                  <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-[#c8914f]">رفع صورة محلياً</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="h-12 w-full cursor-pointer rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition file:cursor-pointer file:rounded-full file:border-none file:bg-[#8b1f3f] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
+                    onChange={(event: ChangeEvent<HTMLInputElement>) => handleImageUpload(event)}
+                  />
+                </label>
+              </div>
+
+              {imagePreview ? (
+                <div className="md:col-span-2 rounded-[24px] border border-white/10 bg-black/20 p-4">
+                  <p className="text-xs uppercase tracking-[0.25em] text-[#c8914f]">معاينة الصورة</p>
+                  <img src={imagePreview} alt="معاينة المنتج" className="mt-3 h-52 w-full rounded-[24px] object-cover" />
+                </div>
+              ) : null}
+
+              <label className="block text-sm text-[#f2e1d0]">
+                <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-[#c8914f]">المقاسات المتاحة</span>
+                <input
+                  className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition focus:border-[#c8914f]"
+                  onChange={(event) => setProductForm((prev) => ({ ...prev, sizes: event.target.value }))}
+                  placeholder="مثال: S, M, L"
+                  value={productForm.sizes}
+                />
+              </label>
+
+              <label className="block text-sm text-[#f2e1d0]">
+                <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-[#c8914f]">الألوان المتاحة</span>
+                <input
+                  className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition focus:border-[#c8914f]"
+                  onChange={(event) => setProductForm((prev) => ({ ...prev, colors: event.target.value }))}
+                  placeholder="مثال: أسود, ذهبي"
+                  value={productForm.colors}
+                />
+              </label>
+
+              <label className="block text-sm text-[#f2e1d0]">
+                <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-[#c8914f]">القسم</span>
+                <select
+                  className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition focus:border-[#c8914f]"
+                  onChange={(event) => setProductForm((prev) => ({ ...prev, category: event.target.value as CategoryKey }))}
+                  value={productForm.category}
+                >
+                  <option value="men">رجالي</option>
+                  <option value="women">نسائي</option>
+                  <option value="islamic">إسلامي</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-[#f2e1d0]" onClick={() => setIsModalOpen(false)} type="button">
+                إلغاء
+              </button>
+              <button className="rounded-full bg-[#8b1f3f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#a32648]" onClick={saveProduct} type="button">
+                حفظ المنتج
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
