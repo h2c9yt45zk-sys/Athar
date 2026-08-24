@@ -14,7 +14,6 @@ import AdminDashboard from './pages/AdminDashboard';
 
 const AppLayout: React.FC = () => {
   const location = useLocation();
-  const isHomePage = location.pathname === '/';
   const isAdminRoute = location.pathname === '/admin';
 
   return (

@@ -1,39 +1,49 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { EGYPTIAN_GOVERNORATES } from '../types';
+import type { CustomerOrderPayload } from '../types';
 
-type CheckoutFormValues = {
-  fullName: string;
-  phone: string;
-  address: string;
-  notes: string;
-  paymentMethod: 'الدفع عند الاستلام' | 'دفع إلكتروني';
-  electronicMethod?: 'إنستا باي' | 'فودافون كاش';
-  screenshotUrl?: string;
-};
+export { EGYPTIAN_GOVERNORATES };
 
-interface CheckoutFormProps {
+export type CheckoutFormValues = CustomerOrderPayload;
+
+export interface CheckoutFormProps {
   itemCount: number;
   subtotal: number;
   onBack: () => void;
   onSubmit: (values: CheckoutFormValues) => void;
   isSubmitting: boolean;
+  initialValues?: Partial<CheckoutFormValues>;
+  errorMessage?: string;
 }
 
-const transferDetails: Record<'إنستا باي' | 'فودافون كاش', string> = {
-  'إنستا باي': 'رقم الحساب / الإيميل: athar.store@instapay.com',
-  'فودافون كاش': 'رقم الهاتف: 966555123456+',
-};
-
-export const CheckoutForm: React.FC<CheckoutFormProps> = ({ itemCount, subtotal, onBack, onSubmit, isSubmitting }) => {
+export const CheckoutForm: React.FC<CheckoutFormProps> = ({
+  itemCount,
+  subtotal,
+  onBack,
+  onSubmit,
+  isSubmitting,
+  initialValues,
+  errorMessage,
+}) => {
   const [formValues, setFormValues] = useState<CheckoutFormValues>({
     fullName: '',
     phone: '',
+    governorate: '',
     address: '',
     notes: '',
-    paymentMethod: 'الدفع عند الاستلام',
-    electronicMethod: undefined,
-    screenshotUrl: '',
   });
   const [errors, setErrors] = useState<Partial<Record<keyof CheckoutFormValues, string>>>({});
+
+  useEffect(() => {
+    setFormValues((prev) => ({
+      ...prev,
+      fullName: initialValues?.fullName ?? prev.fullName,
+      phone: initialValues?.phone ?? prev.phone,
+      governorate: initialValues?.governorate ?? prev.governorate,
+      address: initialValues?.address ?? prev.address,
+      notes: initialValues?.notes ?? prev.notes,
+    }));
+  }, [initialValues]);
 
   const handleChange = (field: keyof CheckoutFormValues, value: string) => {
     setFormValues((prev) => ({ ...prev, [field]: value }));
@@ -48,13 +58,8 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ itemCount, subtotal,
     } else if (!/^[0-9]{11}$/.test(formValues.phone)) {
       nextErrors.phone = 'رقم الهاتف يجب أن يكون 11 رقماً صحيحاً';
     }
+    if (!formValues.governorate.trim()) nextErrors.governorate = 'يرجى اختيار المحافظة';
     if (!formValues.address.trim()) nextErrors.address = 'يرجى إدخال العنوان بالتفصيل';
-    if (formValues.paymentMethod === 'دفع إلكتروني' && !formValues.electronicMethod) {
-      nextErrors.electronicMethod = 'يرجى اختيار طريقة الدفع الإلكترونية';
-    }
-    if (formValues.paymentMethod === 'دفع إلكتروني' && !(formValues.screenshotUrl ?? '').trim()) {
-      nextErrors.screenshotUrl = 'يرجى رفع لقطة شاشة لإيصال التحويل';
-    }
     return nextErrors;
   };
 
@@ -68,18 +73,6 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ itemCount, subtotal,
     onSubmit(formValues);
   };
 
-  const handleScreenshotUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = typeof reader.result === 'string' ? reader.result : '';
-      setFormValues((prev) => ({ ...prev, screenshotUrl: dataUrl }));
-      setErrors((prev) => ({ ...prev, screenshotUrl: undefined }));
-    };
-    reader.readAsDataURL(file);
-  };
 
   return (
     <div dir="rtl" className="space-y-6">
@@ -128,6 +121,23 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ itemCount, subtotal,
           </div>
 
           <div className="space-y-2 text-right">
+            <label className="block text-sm text-[#f2e0ce]">المحافظة</label>
+            <select
+              value={formValues.governorate}
+              onChange={(event) => handleChange('governorate', event.target.value)}
+              className="w-full rounded-2xl border border-white/10 bg-[#13070e] px-4 py-3 text-right text-sm text-white outline-none transition focus:border-[#d8b56a]"
+            >
+              <option value="">اختر المحافظة</option>
+              {EGYPTIAN_GOVERNORATES.map((gov) => (
+                <option key={gov} value={gov}>
+                  {gov}
+                </option>
+              ))}
+            </select>
+            {errors.governorate && <p className="text-xs text-[#ffb3b3]">{errors.governorate}</p>}
+          </div>
+
+          <div className="space-y-2 text-right">
             <label className="block text-sm text-[#f2e0ce]">العنوان بالتفصيل</label>
             <textarea
               value={formValues.address}
@@ -148,72 +158,11 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ itemCount, subtotal,
             />
           </div>
 
-          <div className="space-y-3 rounded-[24px] border border-white/10 bg-[#13070e] p-4 text-right">
-            <p className="text-sm text-[#f2e0ce]">طريقة الدفع</p>
-            <div className="grid gap-3 md:grid-cols-2">
-              {(['الدفع عند الاستلام', 'دفع إلكتروني'] as const).map((method) => (
-                <label key={method} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-white">
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    checked={formValues.paymentMethod === method}
-                    onChange={() => {
-                      setFormValues((prev) => ({
-                        ...prev,
-                        paymentMethod: method,
-                        electronicMethod: method === 'دفع إلكتروني' ? prev.electronicMethod : undefined,
-                        screenshotUrl: method === 'دفع إلكتروني' ? prev.screenshotUrl : '',
-                      }));
-                      setErrors((prev) => ({ ...prev, electronicMethod: undefined, screenshotUrl: undefined }));
-                    }}
-                  />
-                  <span>{method}</span>
-                </label>
-              ))}
+          {errorMessage && (
+            <div className="rounded-2xl border border-red-500/30 bg-red-950/40 p-3 text-xs text-red-200">
+              {errorMessage}
             </div>
-
-            {formValues.paymentMethod === 'دفع إلكتروني' && (
-              <>
-                <div className="grid gap-3 md:grid-cols-2">
-                  {(['إنستا باي', 'فودافون كاش'] as const).map((method) => (
-                    <label key={method} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-3 py-3 text-sm text-white">
-                      <input
-                        type="radio"
-                        name="electronicMethod"
-                        checked={formValues.electronicMethod === method}
-                        onChange={() => {
-                          setFormValues((prev) => ({ ...prev, electronicMethod: method }));
-                          setErrors((prev) => ({ ...prev, electronicMethod: undefined }));
-                        }}
-                      />
-                      <span>{method}</span>
-                    </label>
-                  ))}
-                </div>
-
-                {formValues.electronicMethod && (
-                  <div className="rounded-2xl border border-[#d8b56a]/30 bg-[#15050c]/80 px-4 py-3 text-sm text-[#f1dfbd]">
-                    <p className="text-[10px] uppercase tracking-[0.3em] text-[#d8b56a]">تفاصيل الحساب</p>
-                    <p className="mt-2">{transferDetails[formValues.electronicMethod]}</p>
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <label className="block text-sm text-[#f2e0ce]">يرجى رفع لقطة شاشة (Screenshot) لإيصال التحويل لإتمام الطلب</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleScreenshotUpload}
-                    className="w-full rounded-2xl border border-dashed border-white/20 bg-black/20 px-4 py-3 text-sm text-[#f2e0ce]"
-                  />
-                  {errors.screenshotUrl && <p className="text-xs text-[#ffb3b3]">{errors.screenshotUrl}</p>}
-                  {formValues.screenshotUrl && (
-                    <img src={formValues.screenshotUrl} alt="إيصال الدفع" className="mt-2 h-48 w-full rounded-2xl object-cover" />
-                  )}
-                </div>
-              </>
-            )}
-          </div>
+          )}
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <button
@@ -236,3 +185,5 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({ itemCount, subtotal,
     </div>
   );
 };
+
+export default CheckoutForm;

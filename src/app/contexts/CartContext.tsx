@@ -1,31 +1,22 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { CartItem, Order, Product, CategoryInfo, PaymentMethod, ElectronicPaymentMethod, PaymentStatus } from '../types';
-import { PRODUCTS, CATEGORIES } from '../data/data';
+import { CartItem, Order, OrderItem, Product, CategoryInfo, CustomerOrderPayload } from '../types';
+import { CATEGORIES } from '../data/data';
+import { OrderService } from '../services/orderService';
+import { ProductService } from '../services/productService';
 
 type CategoryKey = 'women' | 'men' | 'islamic';
-
-interface CustomerOrderPayload {
-  fullName: string;
-  phone: string;
-  address: string;
-  notes: string;
-  paymentMethod: PaymentMethod;
-  electronicMethod?: ElectronicPaymentMethod;
-  screenshotUrl?: string;
-  paymentStatus?: PaymentStatus;
-}
 
 interface CartContextType {
   cart: CartItem[];
   isCartOpen: boolean;
   toggleCart: (open?: boolean) => void;
-  addToCart: (name: string, price: number, image: string, options?: { size?: string; color?: string; productId?: string }) => void;
+  addToCart: (name: string, price: number, image: string, options?: { size?: string; productId?: string }) => void;
   removeFromCart: (id: number | string) => void;
   updateQuantity: (id: number | string, delta: number) => void;
   cartSubtotal: number;
   cartCount: number;
   clearCart: () => void;
-  addOrder: (customer: CustomerOrderPayload, items: CartItem[], total: number) => Order;
+  addOrder: (customer: CustomerOrderPayload, items: CartItem[], total: number) => Promise<Order>;
   orders: Order[];
   setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
   products: Product[];
@@ -34,73 +25,21 @@ interface CartContextType {
   setCategories: React.Dispatch<React.SetStateAction<Record<CategoryKey, CategoryInfo>>>;
 }
 
-const initialOrders: Order[] = [
-  {
-    id: 'ORD-1042',
-    orderCode: 'ATHAR-1042',
-    customerName: 'سارة المزروعي',
-    phone: '0501234567',
-    address: 'الرياض، حي العليا، شارع الملك فهد',
-    notes: 'أرجو التواصل قبل التسليم.',
-    total: 1280,
-    status: 'قيد الانتظار',
-    createdAt: '2026-07-28T10:45:00.000Z',
-    items: [
-      { name: 'فستان كاجوال فاخر', size: 'M', quantity: 1, price: 720 },
-      { name: 'حذاء أنيق', size: '39', quantity: 1, price: 560 },
-    ],
-    paymentMethod: 'الدفع عند الاستلام',
-    paymentStatus: 'جاري الفحص',
-  },
-  {
-    id: 'ORD-1041',
-    orderCode: 'ATHAR-1041',
-    customerName: 'أحمد القحطاني',
-    phone: '0559876543',
-    address: 'جدة، شارع الأمير ماجد، أمام المنتزه',
-    notes: 'يرجى ترك الطرد عند الأمن إذا لم أكن متواجداً.',
-    total: 940,
-    status: 'قيد التجهيز',
-    createdAt: '2026-07-29T09:25:00.000Z',
-    items: [
-      { name: 'سترة رجالية كلاسيكية', size: 'L', quantity: 1, price: 560 },
-      { name: 'قماش إسلامي', size: 'Free', quantity: 2, price: 190 },
-    ],
-    paymentMethod: 'دفع إلكتروني',
-    electronicMethod: 'إنستا باي',
-    screenshotUrl: 'https://images.unsplash.com/photo-1589829542153-5f8f39e8dabb?auto=format&fit=crop&w=900&q=80',
-    paymentStatus: 'تم القبول',
-  },
-  {
-    id: 'ORD-1040',
-    orderCode: 'ATHAR-1040',
-    customerName: 'ليلى الحربي',
-    phone: '0563344556',
-    address: 'الدمام، حي الوزيرية، شارع الخليج',
-    notes: 'التوصيل بعد الظهر فقط.',
-    total: 1540,
-    status: 'تم الشحن',
-    createdAt: '2026-07-27T14:15:00.000Z',
-    items: [{ name: 'معطف نسائي', size: 'S', quantity: 1, price: 1540 }],
-    paymentMethod: 'دفع إلكتروني',
-    electronicMethod: 'فودافون كاش',
-    screenshotUrl: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80',
-    paymentStatus: 'جاري الفحص',
-  },
-];
+const ORDER_ARCHIVE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+const pruneExpiredDeliveredOrders = (orderList: Order[]) =>
+  orderList.filter((order) => {
+    if (order.status !== 'تم التوصيل') {
+      return true;
+    }
+
+    const deliveredAt = order.deliveredAt ? new Date(order.deliveredAt).getTime() : new Date(order.createdAt).getTime();
+    const expiresAt = deliveredAt + ORDER_ARCHIVE_TTL_MS;
+
+    return Date.now() <= expiresAt;
+  });
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
-
-const generateOrderCode = (existingOrders: Order[]) => {
-  const candidate = `ATHAR-${Date.now().toString().slice(-5)}`;
-  const isTaken = existingOrders.some((order) => order.orderCode === candidate);
-
-  if (!isTaken) {
-    return candidate;
-  }
-
-  return `ATHAR-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
-};
 
 const getStoredCart = (): CartItem[] => {
   try {
@@ -114,18 +53,28 @@ const getStoredCart = (): CartItem[] => {
 const getStoredOrders = (): Order[] => {
   try {
     const storedOrders = window.localStorage.getItem('athar_orders');
-    return storedOrders ? (JSON.parse(storedOrders) as Order[]) : initialOrders;
+    if (!storedOrders) {
+      return [];
+    }
+
+    const parsedOrders = JSON.parse(storedOrders) as Order[];
+    return Array.isArray(parsedOrders) ? parsedOrders : [];
   } catch {
-    return initialOrders;
+    return [];
   }
 };
 
 const getStoredProducts = (): Product[] => {
   try {
     const storedProducts = window.localStorage.getItem('athar_products');
-    return storedProducts ? (JSON.parse(storedProducts) as Product[]) : PRODUCTS;
+    if (!storedProducts) {
+      return [];
+    }
+
+    const parsedProducts = JSON.parse(storedProducts) as Product[];
+    return Array.isArray(parsedProducts) ? parsedProducts : [];
   } catch {
-    return PRODUCTS;
+    return [];
   }
 };
 
@@ -146,10 +95,52 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
 
   useEffect(() => {
-    window.localStorage.setItem('athar_cart', JSON.stringify(cart));
-    window.localStorage.setItem('athar_orders', JSON.stringify(orders));
-    window.localStorage.setItem('athar_products', JSON.stringify(products));
-    window.localStorage.setItem('athar_categories', JSON.stringify(categories));
+    let isActive = true;
+
+    const loadData = async () => {
+      try {
+        const [fetchedProducts, fetchedOrders] = await Promise.all([
+          ProductService.fetchProducts(),
+          OrderService.fetchAllOrders(),
+        ]);
+        if (isActive) {
+          if (fetchedProducts.length > 0) {
+            setProducts(fetchedProducts);
+          }
+          if (fetchedOrders.length > 0) {
+            setOrders(fetchedOrders);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading initial data from Supabase:', error);
+      }
+    };
+
+    loadData();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const pruneOrders = () => {
+      setOrders((prev) => pruneExpiredDeliveredOrders(prev));
+    };
+
+    pruneOrders();
+    const intervalId = window.setInterval(pruneOrders, 60 * 1000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem('athar_cart', JSON.stringify(cart));
+      window.localStorage.setItem('athar_orders', JSON.stringify(orders));
+      window.localStorage.setItem('athar_products', JSON.stringify(products));
+      window.localStorage.setItem('athar_categories', JSON.stringify(categories));
+    }
   }, [cart, orders, products, categories]);
 
   const toggleCart = (open?: boolean) => {
@@ -160,7 +151,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     name: string,
     price: number,
     image: string,
-    options?: { size?: string; color?: string; productId?: string }
+    options?: { size?: string; productId?: string }
   ) => {
     const newItem: CartItem = {
       id: Date.now() + Math.random(),
@@ -170,7 +161,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       image,
       quantity: 1,
       size: options?.size || 'M',
-      color: options?.color || 'كحلي ملكي',
     };
 
     setCart((prev) => [...prev, newItem]);
@@ -197,34 +187,41 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearCart = () => setCart([]);
 
-  const addOrder = (customer: CustomerOrderPayload, items: CartItem[], total: number) => {
-    const orderItems = items.map((item) => ({
+  const addOrder = async (customer: CustomerOrderPayload, items: CartItem[], total: number): Promise<Order> => {
+    const orderItems: OrderItem[] = items.map((item) => ({
+      productId: item.productId ? String(item.productId) : undefined,
       name: item.name,
       size: item.size || 'M',
       quantity: item.quantity || 1,
       price: item.price,
     }));
 
-    const newOrder: Order = {
+    const generatedCode = OrderService.generateOrderCode(orders);
+
+    const initialOrder: Order = {
       id: `ORD-${Date.now()}`,
-      orderCode: generateOrderCode(orders),
+      orderCode: generatedCode,
       customerName: customer.fullName,
       phone: customer.phone,
+      governorate: customer.governorate,
       address: customer.address,
       notes: customer.notes,
       total,
       status: 'قيد الانتظار',
       createdAt: new Date().toISOString(),
+      deliveredAt: undefined,
       items: orderItems,
-      paymentMethod: customer.paymentMethod,
-      electronicMethod: customer.electronicMethod,
-      screenshotUrl: customer.screenshotUrl,
-      paymentStatus: customer.paymentStatus ?? 'جاري الفحص',
+      paymentMethod: 'الدفع عند الاستلام',
+      paymentStatus: 'جاري الفحص',
     };
 
-    setOrders((prev) => [newOrder, ...prev]);
+    // Save to Supabase and capture the returned order with real database ID
+    const savedOrder = await OrderService.saveOrder(initialOrder, orderItems);
+
+    setOrders((prev) => [savedOrder, ...prev]);
     setCart([]);
-    return newOrder;
+
+    return savedOrder;
   };
 
   const cartSubtotal = cart.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0);

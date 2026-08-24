@@ -1,7 +1,10 @@
-import { ChangeEvent, useEffect, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
-import { Product, CategoryInfo, PaymentStatus } from '../types';
+import { EGYPTIAN_GOVERNORATES, Product, CategoryInfo, PaymentStatus, Order } from '../types';
+import { AdminAuthService } from '../services/adminAuthService';
+import { ProductService } from '../services/productService';
+import { OrderService } from '../services/orderService';
 import {
   BadgeCheck,
   BarChart3,
@@ -27,7 +30,7 @@ type OrderItem = {
   price: number;
 };
 
-type Order = {
+type AdminOrder = {
   id: string;
   orderCode: string;
   customerName: string;
@@ -37,6 +40,7 @@ type Order = {
   total: number;
   status: OrderStatus;
   createdAt: string;
+  deliveredAt?: string;
   items: OrderItem[];
   paymentMethod: 'الدفع عند الاستلام' | 'دفع إلكتروني';
   electronicMethod?: 'إنستا باي' | 'فودافون كاش';
@@ -46,6 +50,8 @@ type Order = {
 
 type CategoryKey = 'women' | 'men' | 'islamic';
 
+const AVAILABLE_SIZE_OPTIONS = ['S', 'M', 'L', 'XL', '2XL', '3XL'];
+
 type ProductFormState = {
   id: string;
   name: string;
@@ -53,8 +59,7 @@ type ProductFormState = {
   price: number;
   description: string;
   imageUrl: string;
-  sizes: string;
-  colors: string;
+  sizes: string[];
 };
 
 const sidebarItems: Array<{ key: 'orders' | 'store'; label: string; icon: typeof BarChart3 }> = [
@@ -84,11 +89,42 @@ const orderStatusTabs: Array<{ label: string; value: 'الكل' | OrderStatus }>
 
 const paymentStatusTabs: PaymentStatus[] = ['جاري الفحص', 'تم القبول', 'خطأ في الدفع'];
 
+const getPaymentMethodDisplay = (paymentMethod?: string, electronicMethod?: string) => {
+  const method = paymentMethod || 'الدفع عند الاستلام';
+  if (method === 'الدفع عند الاستلام') {
+    return 'الدفع عند الاستلام';
+  }
+
+  return `${method}${electronicMethod ? ` - ${electronicMethod}` : ''}`;
+};
+
+const getPaymentStatusDisplay = (paymentMethod?: string, paymentStatus?: string) => {
+  const method = paymentMethod || 'الدفع عند الاستلام';
+  if (method === 'الدفع عند الاستلام') {
+    return '-';
+  }
+
+  return paymentStatus || 'جاري الفحص';
+};
+
+const isOrderArchiveVisible = (order: Order) => {
+  if (order.status !== 'تم التوصيل') {
+    return false;
+  }
+
+  const deliveredAt = new Date(order.deliveredAt ?? order.createdAt).getTime();
+  const expiresAt = deliveredAt + 7 * 24 * 60 * 60 * 1000;
+
+  return Date.now() <= expiresAt;
+};
+
 const categoryTabs: Array<{ key: CategoryKey; label: string }> = [
   { key: 'men', label: 'رجالي' },
   { key: 'women', label: 'نسائي' },
   { key: 'islamic', label: 'إسلامي' },
 ];
+
+const ADMIN_SESSION_KEY = 'athar_admin_authenticated';
 
 const normalizeOrderCode = (value?: string | null) => {
   if (value === undefined || value === null) {
@@ -110,8 +146,7 @@ const emptyProductForm = (category: CategoryKey): ProductFormState => ({
   price: 0,
   description: '',
   imageUrl: '',
-  sizes: '',
-  colors: '',
+  sizes: ['S', 'M', 'L', 'XL'],
 });
 
 export default function AdminDashboard() {
@@ -121,30 +156,48 @@ export default function AdminDashboard() {
   const [selectedCategory, setSelectedCategory] = useState<CategoryKey>('men');
   const [selectedOrderTab, setSelectedOrderTab] = useState<'الكل' | OrderStatus>('الكل');
   const [orderSort, setOrderSort] = useState<'newest' | 'highestPrice' | 'nearest'>('newest');
-  const [orderSearch, setOrderSearch] = useState('');
-  const [submittedOrderCode, setSubmittedOrderCode] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [selectedGovernorate, setSelectedGovernorate] = useState('الكل');
   const [ordersSectionTab, setOrdersSectionTab] = useState<'active' | 'history'>('active');
   const [deliveryConfirmOrderId, setDeliveryConfirmOrderId] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState<string>('');
+  const [bestSellerNotice, setBestSellerNotice] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [productToDeleteId, setProductToDeleteId] = useState<string | null>(null);
   const [productForm, setProductForm] = useState<ProductFormState>(emptyProductForm('men'));
   const [imagePreview, setImagePreview] = useState<string>('');
   const [imageUploadFile, setImageUploadFile] = useState<File | null>(null);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true';
+  });
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isShaking, setIsShaking] = useState(false);
 
   const selectedCollection = categories[selectedCategory] ?? categories.women;
-  const visibleProducts = useMemo(() => products.filter((product) => product.category === selectedCategory), [products, selectedCategory]);
+  const bestSellerProducts = useMemo(() => products.filter((product) => product.isBestSeller).slice(0, 4), [products]);
+  const visibleProducts = useMemo(
+    () => products.filter((product) => product.category === selectedCategory && !product.isBestSeller),
+    [products, selectedCategory]
+  );
 
   const filteredOrders = useMemo(() => {
     const nearbyPriority = ['الرياض', 'جدة', 'الدمام', 'مكة المكرمة', 'الشرقية', 'الخبر', 'الظهران'];
-    const normalizedSearch = normalizeOrderCode(submittedOrderCode);
+    const normalizedSearch = customerSearch.trim().toLowerCase();
 
     return orders
       .filter((order) => order.status !== 'تم التوصيل')
       .filter((order) => (selectedOrderTab === 'الكل' ? true : order.status === selectedOrderTab))
       .filter((order) => {
         if (!normalizedSearch) return true;
-        return normalizeOrderCode(order.orderCode) === normalizedSearch;
+        return (order.customerName ?? '').toLowerCase().includes(normalizedSearch);
+      })
+      .filter((order) => {
+        if (selectedGovernorate === 'الكل') return true;
+        return order.address?.includes(selectedGovernorate) ?? false;
       })
       .sort((a, b) => {
         if (orderSort === 'highestPrice') {
@@ -159,32 +212,33 @@ export default function AdminDashboard() {
         }
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       });
-  }, [orders, selectedOrderTab, orderSort]);
+  }, [orders, selectedOrderTab, orderSort, customerSearch, selectedGovernorate]);
 
   const historyOrders = useMemo(
-    () => orders.filter((order) => order.status === 'تم التوصيل').sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-    [orders]
+    () =>
+      orders
+        .filter((order) => isOrderArchiveVisible(order))
+        .filter((order) => {
+          if (!customerSearch.trim()) return true;
+          return (order.customerName ?? '').toLowerCase().includes(customerSearch.trim().toLowerCase());
+        })
+        .filter((order) => {
+          if (selectedGovernorate === 'الكل') return true;
+          return order.address?.includes(selectedGovernorate) ?? false;
+        })
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [orders, customerSearch, selectedGovernorate]
   );
 
-  const searchedOrders = useMemo(() => {
-    const normalizedSearch = normalizeOrderCode(submittedOrderCode);
-
-    if (!normalizedSearch) {
-      return [];
-    }
-
-    return orders.filter((order) => normalizeOrderCode(order.orderCode) === normalizedSearch);
-  }, [orders, submittedOrderCode]);
-
-  const currentOrders = submittedOrderCode ? searchedOrders : ordersSectionTab === 'active' ? filteredOrders : historyOrders;
+  const currentOrders = ordersSectionTab === 'active' ? filteredOrders : historyOrders;
   const selectedOrder = currentOrders.find((order) => order.id === selectedOrderId) ?? currentOrders[0] ?? null;
 
   useEffect(() => {
-    const ordersToCheck = submittedOrderCode ? searchedOrders : ordersSectionTab === 'active' ? filteredOrders : historyOrders;
+    const ordersToCheck = ordersSectionTab === 'active' ? filteredOrders : historyOrders;
     if (ordersToCheck.length > 0 && !ordersToCheck.some((order) => order.id === selectedOrderId)) {
       setSelectedOrderId(ordersToCheck[0].id);
     }
-  }, [filteredOrders, historyOrders, searchedOrders, ordersSectionTab, selectedOrderId, submittedOrderCode, orders]);
+  }, [filteredOrders, historyOrders, ordersSectionTab, selectedOrderId, orders]);
 
   useEffect(() => {
     return () => {
@@ -194,15 +248,9 @@ export default function AdminDashboard() {
     };
   }, [imagePreview]);
 
-  const handleOrderSearch = () => {
-    const normalized = normalizeOrderCode(orderSearch);
-    setSubmittedOrderCode(normalized);
-    setSelectedOrderId('');
-  };
-
   const clearOrderSearch = () => {
-    setOrderSearch('');
-    setSubmittedOrderCode('');
+    setCustomerSearch('');
+    setSelectedGovernorate('الكل');
   };
 
   const copyShippingDetails = (order: Order) => {
@@ -222,16 +270,23 @@ export default function AdminDashboard() {
   const handleImageUpload = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      console.error('Invalid upload file type:', file.type);
+      setBestSellerNotice('يرجى اختيار ملف صورة صحيح.');
+      return;
+    }
+
     const previewUrl = URL.createObjectURL(file);
     setImageUploadFile(file);
     setImagePreview(previewUrl);
     setProductForm((prev) => ({ ...prev, imageUrl: previewUrl }));
+    console.log('Local image preview prepared for upload:', { name: file.name, type: file.type, size: file.size });
   };
 
   const quickStats = [
-    { label: 'إجمالي الطلبات', value: '128', icon: ShoppingBag },
-    { label: 'طلبات معلقة', value: '14', icon: Clock3 },
-    { label: 'الإيرادات', value: '١٢٫٨٧٥ ر.س', icon: CreditCard },
+    { label: 'إجمالي الطلبات', value: String(orders.length), icon: ShoppingBag },
+    { label: 'طلبات معلقة', value: String(orders.filter((order) => order.status !== 'تم التوصيل').length), icon: Clock3 },
   ];
 
   const handleCollectionChange = (id: string, field: keyof CategoryInfo, value: string) => {
@@ -246,7 +301,22 @@ export default function AdminDashboard() {
   };
 
   const updateOrderStatus = (orderId: string, status: OrderStatus) => {
-    setOrders((prev) => prev.map((order) => (order.id === orderId ? { ...order, status } : order)));
+    setOrders((prev) =>
+      prev.map((order) => {
+        if (order.id !== orderId) {
+          return order;
+        }
+
+        if (status === 'تم التوصيل') {
+          return { ...order, status, deliveredAt: order.deliveredAt ?? new Date().toISOString() };
+        }
+
+        return { ...order, status, deliveredAt: undefined };
+      })
+    );
+    OrderService.updateOrderStatus(orderId, status).catch((err) => {
+      console.warn('Failed to persist status change to Supabase:', err);
+    });
   };
 
   const updatePaymentStatus = (orderId: string, paymentStatus: PaymentStatus) => {
@@ -259,7 +329,18 @@ export default function AdminDashboard() {
 
   const confirmDeliveryStatus = () => {
     if (!deliveryConfirmOrderId) return;
-    setOrders((prev) => prev.map((order) => (order.id === deliveryConfirmOrderId ? { ...order, status: 'تم التوصيل' } : order)));
+    const deliveredAt = new Date().toISOString();
+    const targetId = deliveryConfirmOrderId;
+    setOrders((prev) =>
+      prev.map((order) =>
+        order.id === targetId
+          ? { ...order, status: 'تم التوصيل', deliveredAt: order.deliveredAt ?? deliveredAt }
+          : order
+      )
+    );
+    OrderService.updateOrderStatus(targetId, 'تم التوصيل').catch((err) => {
+      console.warn('Failed to persist delivered status to Supabase:', err);
+    });
     setDeliveryConfirmOrderId(null);
   };
 
@@ -269,6 +350,9 @@ export default function AdminDashboard() {
 
   const restoreOrder = (orderId: string, status: 'قيد الانتظار' | 'قيد التجهيز' | 'تم الشحن') => {
     setOrders((prev) => prev.map((order) => (order.id === orderId ? { ...order, status } : order)));
+    OrderService.updateOrderStatus(orderId, status).catch((err) => {
+      console.warn('Failed to persist restored status to Supabase:', err);
+    });
   };
 
   const openAddModal = () => {
@@ -288,89 +372,276 @@ export default function AdminDashboard() {
       price: product.price,
       description: product.description ?? '',
       imageUrl: product.image,
-      sizes: (product.sizes ?? []).join(', '),
-      colors: (product.colors ?? []).join(', '),
+      sizes: (product.sizes ?? []).filter((size) => AVAILABLE_SIZE_OPTIONS.includes(size)),
     });
     setImagePreview(product.image);
     setImageUploadFile(null);
     setIsModalOpen(true);
   };
 
-  const saveProduct = () => {
-    const normalizedSizes = productForm.sizes
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean);
+  const saveProduct = async () => {
+    const cleanedName = productForm.name.trim();
+    const cleanedDescription = productForm.description.trim();
+    const normalizedSizes = productForm.sizes.filter(Boolean);
 
-    const normalizedColors = productForm.colors
-      .split(',')
-      .map((item) => item.trim())
-      .filter(Boolean);
+    if (!cleanedName) {
+      setBestSellerNotice('يرجى إدخال اسم المنتج قبل الحفظ.');
+      console.error('Attempted to save product without name.');
+      return;
+    }
 
-    const productPayload: Product = {
-      id: editingProductId ?? `p-${Date.now()}`,
-      name: productForm.name.trim() || 'منتج جديد',
-      subtitle: productForm.description.trim() || productForm.name.trim() || 'قطعة فاخرة',
-      category: productForm.category,
-      price: Number(productForm.price) || 0,
-      description: productForm.description.trim(),
-      image: productForm.imageUrl.trim() || 'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=900&q=80',
-      sizes: normalizedSizes,
-      colors: normalizedColors,
-    };
+    if (Number(productForm.price) <= 0) {
+      setBestSellerNotice('يرجى إدخال سعر صالح للمنتج.');
+      console.error('Attempted to save product with invalid price:', productForm.price);
+      return;
+    }
 
-    setProducts((prev) => {
-      if (editingProductId) {
-        return prev.map((product) => (product.id === editingProductId ? productPayload : product));
-      }
-      return [productPayload, ...prev];
+    if (!normalizedSizes.length) {
+      setBestSellerNotice('يرجى اختيار مقاس واحد على الأقل للمنتج.');
+      console.error('Attempted to save product without sizes selected.');
+      return;
+    }
+
+    let finalImageUrl = productForm.imageUrl.trim();
+    const fallbackImageUrl =
+      finalImageUrl || 'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=900&q=80';
+
+    setIsSavingProduct(true);
+    setBestSellerNotice('');
+    console.log('Submitting product to Supabase:', {
+      form: productForm,
+      normalizedSizes,
+      imageUploadFile: imageUploadFile ? { name: imageUploadFile.name, type: imageUploadFile.type, size: imageUploadFile.size } : null,
     });
 
-    setIsModalOpen(false);
-    setSelectedCategory(productPayload.category);
+    try {
+      if (imageUploadFile) {
+        const uploadedImageUrl = await ProductService.uploadProductImage(imageUploadFile, finalImageUrl);
+        finalImageUrl = uploadedImageUrl || fallbackImageUrl;
+        console.log('Product image resolved for save:', finalImageUrl);
+      }
+
+      const productPayload: Product = {
+        id: editingProductId ?? `p-${Date.now()}`,
+        name: cleanedName,
+        subtitle: cleanedDescription || cleanedName,
+        category: productForm.category,
+        price: Number(productForm.price) || 0,
+        description: cleanedDescription,
+        image: finalImageUrl || fallbackImageUrl,
+        sizes: normalizedSizes,
+        isBestSeller: editingProductId ? products.find((product) => product.id === editingProductId)?.isBestSeller ?? false : false,
+      };
+
+      const savedProduct = editingProductId
+        ? await ProductService.updateProduct(productPayload)
+        : await ProductService.createProduct(productPayload);
+
+      setProducts((prev) => {
+        if (editingProductId) {
+          return prev.map((product) => (product.id === editingProductId ? savedProduct : product));
+        }
+        return [savedProduct, ...prev.filter((product) => product.id !== savedProduct.id)];
+      });
+
+      setIsModalOpen(false);
+      setSelectedCategory(savedProduct.category);
+      setProductForm(emptyProductForm(savedProduct.category));
+      setImagePreview('');
+      setImageUploadFile(null);
+      console.log('Product saved successfully:', savedProduct);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown save error';
+      console.error('Failed to save product:', error);
+      setBestSellerNotice(`فشل حفظ المنتج: ${errorMessage}`);
+    } finally {
+      setIsSavingProduct(false);
+    }
+  };
+
+  const toggleBestSeller = async (productId: string, isAdd: boolean) => {
+    if (isAdd) {
+      const currentBestSellers = products.filter((product) => product.isBestSeller).length;
+      if (currentBestSellers >= 4) {
+        setBestSellerNotice('لا يمكن إضافة منتج جديد، الحد الأقصى للأكثر مبيعا هو 4 منتجات فقط. يجب إزالة منتج أولاً');
+        return;
+      }
+    }
+
+    const targetProduct = products.find((product) => product.id === productId);
+    if (!targetProduct) {
+      return;
+    }
+
+    try {
+      const updatedProduct = await ProductService.updateProduct({
+        ...targetProduct,
+        isBestSeller: isAdd,
+      });
+
+      setBestSellerNotice('');
+      setProducts((prev) => prev.map((product) => (product.id === productId ? updatedProduct : product)));
+    } catch (error) {
+      console.error('Failed to update best seller status:', error);
+      setBestSellerNotice('فشل تحديث حالة المنتج الأكثر مبيعاً.');
+    }
+  };
+
+  const deleteProduct = async (productId: string) => {
+    try {
+      await ProductService.deleteProduct(productId);
+      setProducts((prev) => prev.filter((product) => product.id !== productId));
+      setProductToDeleteId(null);
+    } catch (error) {
+      console.error('Failed to delete product:', error);
+      setBestSellerNotice('فشل حذف المنتج. تأكد من وجوده في قاعدة البيانات.');
+    }
+  };
+
+  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const trimmedPassword = password.trim();
+
+    if (!trimmedPassword) {
+      setLoginError('يرجى إدخال كلمة المرور');
+      setIsShaking(true);
+      window.setTimeout(() => setIsShaking(false), 500);
+      return;
+    }
+
+    try {
+      const isValid = await AdminAuthService.verifyPassword(trimmedPassword);
+
+      if (isValid) {
+        sessionStorage.setItem(ADMIN_SESSION_KEY, 'true');
+        setIsAuthenticated(true);
+        setLoginError('');
+        setPassword('');
+        return;
+      }
+
+      setLoginError('كلمة المرور غير صحيحة أو غير مُعدّة في قاعدة البيانات');
+      setIsShaking(true);
+      window.setTimeout(() => setIsShaking(false), 500);
+    } catch (error) {
+      console.error('Admin login verification failed:', error);
+      setLoginError('تعذر التحقق من كلمة المرور الآن');
+      setIsShaking(true);
+      window.setTimeout(() => setIsShaking(false), 500);
+    }
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    setIsAuthenticated(false);
+    setPassword('');
+    setLoginError('');
   };
 
   return (
-    <div dir="rtl" className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(90,24,39,0.34),_transparent_30%),linear-gradient(135deg,_#050505_0%,_#11070c_45%,_#080505_100%)] text-[#f7e7dc]">
-      <div className="mx-auto flex max-w-7xl flex-col lg:flex-row">
-        <aside className="w-full border-b border-white/10 bg-[#14090f]/80 p-6 backdrop-blur-xl lg:w-72 lg:border-b-0 lg:border-l lg:border-white/10">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#c8914f]/30 bg-[#c8914f]/10 text-[#f3ce90]">
-              <BadgeCheck className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-[10px] uppercase tracking-[0.35em] text-[#c8914f]">Athar</p>
-              <h2 className="text-lg font-semibold text-white">لوحة الإدارة</h2>
-            </div>
-          </div>
+    <>
+      <style>{`
+        @keyframes shake {
+          0%, 100% { transform: translateX(0); }
+          20% { transform: translateX(-8px); }
+          40% { transform: translateX(8px); }
+          60% { transform: translateX(-6px); }
+          80% { transform: translateX(6px); }
+        }
+      `}</style>
 
-          <nav className="mt-8 space-y-2">
-            {sidebarItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.key;
-              return (
+      {!isAuthenticated ? (
+        <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(212,175,55,0.12),_transparent_25%),linear-gradient(135deg,_#1a0b12_0%,_#11070c_35%,_#050505_100%)] px-4 py-10">
+          <div className="w-full max-w-md rounded-[28px] border border-[#D4AF37]/20 bg-[#14090f]/90 p-6 shadow-[0_30px_90px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+            <div className="mb-6 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-[#D4AF37]/30 bg-[#D4AF37]/10 text-[#f3ce90]">
+                <BadgeCheck className="h-6 w-6" />
+              </div>
+              <p className="mt-4 text-[10px] uppercase tracking-[0.35em] text-[#D4AF37]">Athar</p>
+              <h2 className="mt-2 text-2xl font-semibold text-white">لوحة الإدارة</h2>
+            </div>
+
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm text-[#f2e1d0]">كلمة المرور</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => {
+                    setPassword(event.target.value);
+                    if (loginError) {
+                      setLoginError('');
+                    }
+                    if (isShaking) {
+                      setIsShaking(false);
+                    }
+                  }}
+                  className={`w-full rounded-2xl border bg-[#12070d]/70 px-4 py-3 text-sm text-white outline-none transition focus:border-[#D4AF37] ${loginError ? 'border-red-400' : 'border-white/10'} ${isShaking ? 'animate-[shake_0.35s_ease-in-out_2]' : ''}`}
+                  placeholder="أدخل كلمة المرور"
+                  autoComplete="current-password"
+                />
+              </div>
+
+              {loginError && <p className="text-sm text-red-300">{loginError}</p>}
+
+              <button
+                type="submit"
+                className="w-full rounded-full bg-[#8b1f3f] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#a32648]"
+              >
+                دخول
+              </button>
+            </form>
+          </div>
+        </div>
+      ) : (
+        <div dir="rtl" className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(90,24,39,0.34),_transparent_30%),linear-gradient(135deg,_#050505_0%,_#11070c_45%,_#080505_100%)] text-[#f7e7dc]">
+          <div className="mx-auto flex max-w-7xl flex-col lg:flex-row">
+            <aside className="w-full border-b border-white/10 bg-[#14090f]/80 p-6 backdrop-blur-xl lg:w-72 lg:border-b-0 lg:border-l lg:border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#c8914f]/30 bg-[#c8914f]/10 text-[#f3ce90]">
+                  <BadgeCheck className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.35em] text-[#c8914f]">Athar</p>
+                  <h2 className="text-lg font-semibold text-white">لوحة الإدارة</h2>
+                </div>
+              </div>
+
+              <nav className="mt-8 space-y-2">
+                {sidebarItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = activeTab === item.key;
+                  return (
+                    <button
+                      key={item.key}
+                      className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-right text-sm transition ${
+                        isActive ? 'bg-[#8b1f3f] text-white shadow-lg shadow-[#8b1f3f]/20' : 'bg-white/5 text-[#f4dfc9] hover:bg-white/10'
+                      }`}
+                      onClick={() => setActiveTab(item.key)}
+                      type="button"
+                    >
+                      <span>{item.label}</span>
+                      <Icon className="h-4 w-4" />
+                    </button>
+                  );
+                })}
+              </nav>
+
+              <div className="mt-8 rounded-3xl border border-[#c8914f]/20 bg-[#1f0f16]/80 p-4">
+                <p className="text-[10px] uppercase tracking-[0.3em] text-[#c8914f]">ملاحظة سريعة</p>
+                <p className="mt-2 text-sm leading-7 text-[#f2e0ce]">تابع الطلبات اليومية وحافظ على هوية المتجر الراقية في كل قسم.</p>
                 <button
-                  key={item.key}
-                  className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-right text-sm transition ${
-                    isActive ? 'bg-[#8b1f3f] text-white shadow-lg shadow-[#8b1f3f]/20' : 'bg-white/5 text-[#f4dfc9] hover:bg-white/10'
-                  }`}
-                  onClick={() => setActiveTab(item.key)}
                   type="button"
+                  onClick={handleLogout}
+                  className="mt-4 w-full rounded-full border border-[#c8914f]/30 bg-[#c8914f]/10 px-3 py-2 text-sm text-[#f3ce90] transition hover:bg-[#c8914f]/15"
                 >
-                  <span>{item.label}</span>
-                  <Icon className="h-4 w-4" />
+                  تسجيل خروج
                 </button>
-              );
-            })}
-          </nav>
+              </div>
+            </aside>
 
-          <div className="mt-8 rounded-3xl border border-[#c8914f]/20 bg-[#1f0f16]/80 p-4">
-            <p className="text-[10px] uppercase tracking-[0.3em] text-[#c8914f]">ملاحظة سريعة</p>
-            <p className="mt-2 text-sm leading-7 text-[#f2e0ce]">تابع الطلبات اليومية وحافظ على هوية المتجر الراقية في كل قسم.</p>
-          </div>
-        </aside>
-
-        <main className="flex-1 pt-20 p-6 lg:pt-24 lg:p-8">
+            <main className="flex-1 pt-20 p-6 lg:pt-24 lg:p-8">
           {activeTab === 'orders' && (
             <section className="mt-6 space-y-6">
               <div className="grid gap-4 md:grid-cols-3">
@@ -450,38 +721,50 @@ export default function AdminDashboard() {
                           </div>
                         </div>
 
-                        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <p className="text-xs uppercase tracking-[0.25em] text-[#c8914f]">البحث برمز الطلب</p>
-                          <div className="mt-3 flex flex-col gap-3 md:flex-row">
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                            <p className="text-xs uppercase tracking-[0.25em] text-[#c8914f]">البحث بالاسم</p>
                             <input
-                              value={orderSearch}
-                              onChange={(event) => setOrderSearch(event.target.value)}
-                              onKeyDown={(event) => {
-                                if (event.key === 'Enter') {
-                                  handleOrderSearch();
-                                }
-                              }}
-                              placeholder="اكتب رمز الطلب مثل #ATHAR-1045"
-                              className="w-full rounded-2xl border border-white/10 bg-[#12070d]/70 px-4 py-3 text-sm text-white outline-none transition focus:border-[#c8914f]"
+                              value={customerSearch}
+                              onChange={(event) => setCustomerSearch(event.target.value)}
+                              placeholder="اكتب اسم العميل"
+                              className="mt-3 w-full rounded-2xl border border-white/10 bg-[#12070d]/70 px-4 py-3 text-sm text-white outline-none transition focus:border-[#c8914f]"
                             />
-                            <button
-                              type="button"
-                              onClick={handleOrderSearch}
-                              className="inline-flex items-center justify-center gap-2 rounded-full bg-[#8b1f3f] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#a32648]"
+                          </div>
+
+                          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                            <p className="text-xs uppercase tracking-[0.25em] text-[#c8914f]">تصفية حسب المحافظة</p>
+                            <select
+                              value={selectedGovernorate}
+                              onChange={(event) => setSelectedGovernorate(event.target.value)}
+                              className="mt-3 w-full rounded-2xl border border-white/10 bg-[#12070d]/70 px-4 py-3 text-sm text-white outline-none transition focus:border-[#c8914f]"
                             >
-                              <Search className="h-4 w-4" />
-                              بحث
-                            </button>
+                              <option value="الكل">كل المحافظات</option>
+                              {EGYPTIAN_GOVERNORATES.map((gov) => (
+                                <option key={gov} value={gov} className="bg-[#12070d] text-white">
+                                  {gov}
+                                </option>
+                              ))}
+                            </select>
                           </div>
                         </div>
 
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <div className="mt-3 flex flex-wrap gap-3">
                           <div className="rounded-2xl border border-white/10 bg-[#12070d]/70 px-4 py-3 text-sm text-[#f2e1d0]">
                             {filteredOrders.length} طلب متاح حالياً
                           </div>
                           <div className="rounded-2xl border border-white/10 bg-[#12070d]/70 px-4 py-3 text-sm text-[#f2e1d0]">
                             {selectedOrderTab === 'الكل' ? 'كل الحالات' : `حالة: ${orderStatusTabs.find((tab) => tab.value === selectedOrderTab)?.label}`}
                           </div>
+                          {(customerSearch || selectedGovernorate !== 'الكل') && (
+                            <button
+                              type="button"
+                              onClick={clearOrderSearch}
+                              className="rounded-full border border-[#c8914f]/30 bg-[#c8914f]/10 px-3 py-2 text-sm text-[#f3ce90] transition hover:bg-[#c8914f]/15"
+                            >
+                              مسح الفلاتر
+                            </button>
+                          )}
                         </div>
                       </>
                     ) : (
@@ -518,7 +801,9 @@ export default function AdminDashboard() {
                       ))
                     ) : (
                       <div className="rounded-2xl border border-white/10 bg-black/20 p-6 text-center text-sm text-[#f2e1d0]">
-                        {submittedOrderCode ? 'لا توجد نتائج مطابقة لهذا الكود' : 'لا توجد طلبات متاحة لهذه الفلاتر، حاول تغيير الحالة أو الفلتر.'}
+                        {customerSearch || selectedGovernorate !== 'الكل'
+                          ? 'لا توجد نتائج مطابقة لهذا الاسم أو المحافظة'
+                          : 'لا توجد طلبات متاحة لهذه الفلاتر، حاول تغيير الحالة أو الفلتر.'}
                       </div>
                     )}
                   </div>
@@ -581,11 +866,27 @@ export default function AdminDashboard() {
                         <div className="mt-3 grid gap-3 md:grid-cols-2">
                           <div className="rounded-2xl border border-white/10 bg-black/20 p-3 text-sm text-[#f2e1d0]">
                             <p className="text-xs uppercase tracking-[0.25em] text-[#c8914f]">طريقة الدفع</p>
-                            <p className="mt-2 text-white">{selectedOrder.paymentMethod}{selectedOrder.electronicMethod ? ` - ${selectedOrder.electronicMethod}` : ''}</p>
+                            <p className="mt-2 text-white">
+                              {getPaymentMethodDisplay(
+                                selectedOrder.paymentMethod || (selectedOrder as any).payment_method,
+                                selectedOrder.electronicMethod || (selectedOrder as any).electronic_method
+                              )}
+                            </p>
                           </div>
                           <div className="rounded-2xl border border-white/10 bg-black/20 p-3 text-sm text-[#f2e1d0]">
                             <p className="text-xs uppercase tracking-[0.25em] text-[#c8914f]">حالة الدفع</p>
-                            <p className={`mt-2 inline-flex rounded-full border px-3 py-1 text-xs ${paymentStatusClasses[selectedOrder.paymentStatus]}`}>{selectedOrder.paymentStatus}</p>
+                            <p
+                              className={`mt-2 inline-flex rounded-full border px-3 py-1 text-xs ${
+                                (selectedOrder.paymentMethod || (selectedOrder as any).payment_method || 'الدفع عند الاستلام') === 'الدفع عند الاستلام' || !selectedOrder.paymentStatus
+                                  ? 'border-white/10 bg-white/5 text-[#f2e1d0]'
+                                  : (paymentStatusClasses[selectedOrder.paymentStatus] ?? 'border-white/10 bg-white/5 text-[#f2e1d0]')
+                              }`}
+                            >
+                              {getPaymentStatusDisplay(
+                                selectedOrder.paymentMethod || (selectedOrder as any).payment_method,
+                                selectedOrder.paymentStatus || (selectedOrder as any).payment_status
+                              )}
+                            </p>
                           </div>
                         </div>
 
@@ -739,6 +1040,34 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
+              {bestSellerProducts.length > 0 && (
+                <div className="mb-8 rounded-[28px] border border-[#c8914f]/30 bg-[#1a0d13]/90 p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <p className="text-sm uppercase tracking-[0.3em] text-[#c8914f]">الأكثر مبيعا</p>
+                    <span className="rounded-full border border-[#c8914f]/20 bg-[#c8914f]/10 px-3 py-1 text-xs text-[#f3ce90]">{bestSellerProducts.length}/4</span>
+                  </div>
+
+                  <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+                    {bestSellerProducts.map((product) => (
+                      <article key={product.id} className="group relative overflow-hidden rounded-[24px] border border-[#c8914f]/20 bg-[#12070d]/80 p-3">
+                        <img alt={product.name} className="h-36 w-full rounded-2xl object-cover" src={product.image} />
+                        <div className="mt-3">
+                          <h3 className="text-base font-semibold text-white">{product.name}</h3>
+                          <p className="mt-1 text-sm text-[#f2e1d0]">{product.price} ر.س</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => toggleBestSeller(product.id, false)}
+                          className="mt-3 w-full rounded-full border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-200 transition hover:bg-red-500/20"
+                        >
+                          إزالة من الأكثر مبيعا
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
                 {visibleProducts.map((product) => (
                   <article key={product.id} className="group relative overflow-hidden rounded-[28px] border border-white/10 bg-[#1a0d13]/90 shadow-[0_18px_60px_rgba(0,0,0,0.28)] transition duration-300 hover:-translate-y-1 hover:border-[#c8914f]/40">
@@ -751,6 +1080,14 @@ export default function AdminDashboard() {
                         title="تعديل"
                       >
                         <PencilLine className="h-4 w-4" />
+                      </button>
+                      <button
+                        className="rounded-full border border-red-400/30 bg-red-500/10 p-2 text-red-200 shadow-lg transition hover:scale-105 hover:bg-red-500/20"
+                        onClick={() => setProductToDeleteId(product.id)}
+                        type="button"
+                        title="حذف"
+                      >
+                        <X className="h-4 w-4" />
                       </button>
                       <Link
                         to={`/product/${product.id}`}
@@ -776,13 +1113,13 @@ export default function AdminDashboard() {
                           </span>
                         ))}
                       </div>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {(product.colors ?? []).map((color) => (
-                          <span key={color} className="rounded-full border border-[#c8914f]/20 bg-[#c8914f]/10 px-3 py-1 text-xs text-[#f3ce90]">
-                            {color}
-                          </span>
-                        ))}
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => toggleBestSeller(product.id, true)}
+                        className="mt-4 w-full rounded-full border border-[#c8914f]/30 bg-[#c8914f]/10 px-3 py-2 text-sm text-[#f3ce90] transition hover:bg-[#c8914f]/15"
+                      >
+                        إضافة إلى الأكثر مبيعا
+                      </button>
                     </div>
                   </article>
                 ))}
@@ -791,6 +1128,33 @@ export default function AdminDashboard() {
           )}
         </main>
       </div>
+
+      {productToDeleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[28px] border border-white/10 bg-[#150a10] p-6 shadow-[0_24px_90px_rgba(0,0,0,0.45)]">
+            <div className="mb-4">
+              <h3 className="text-xl font-semibold text-white">حذف المنتج</h3>
+              <p className="mt-2 text-sm leading-6 text-[#f2e1d0]">هل أنت متأكد من حذف هذا المنتج؟ سيتم إزالته فوراً من المتجر.</p>
+            </div>
+            <div className="flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={() => deleteProduct(productToDeleteId)}
+                className="rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
+              >
+                نعم، احذف المنتج
+              </button>
+              <button
+                type="button"
+                onClick={() => setProductToDeleteId(null)}
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-[#f2e1d0] transition hover:bg-white/10"
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {deliveryConfirmOrderId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
@@ -889,25 +1253,36 @@ export default function AdminDashboard() {
                 </div>
               ) : null}
 
-              <label className="block text-sm text-[#f2e1d0]">
-                <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-[#c8914f]">المقاسات المتاحة</span>
-                <input
-                  className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition focus:border-[#c8914f]"
-                  onChange={(event) => setProductForm((prev) => ({ ...prev, sizes: event.target.value }))}
-                  placeholder="مثال: S, M, L"
-                  value={productForm.sizes}
-                />
-              </label>
+              <div className="block text-sm text-[#f2e1d0] md:col-span-2">
+                <span className="mb-2 block text-xs uppercase tracking-[0.25em] text-[#c8914f]">المقاسات المتاحة</span>
+                <div className="grid grid-cols-3 gap-3 rounded-2xl border border-white/10 bg-black/20 p-3 sm:grid-cols-6">
+                  {AVAILABLE_SIZE_OPTIONS.map((size) => {
+                    const isChecked = productForm.sizes.includes(size);
 
-              <label className="block text-sm text-[#f2e1d0]">
-                <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-[#c8914f]">الألوان المتاحة</span>
-                <input
-                  className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition focus:border-[#c8914f]"
-                  onChange={(event) => setProductForm((prev) => ({ ...prev, colors: event.target.value }))}
-                  placeholder="مثال: أسود, ذهبي"
-                  value={productForm.colors}
-                />
-              </label>
+                    return (
+                      <label
+                        key={size}
+                        className={`flex cursor-pointer items-center justify-center rounded-full border px-2 py-2 text-sm font-medium transition ${
+                          isChecked ? 'border-[#c8914f] bg-[#c8914f]/15 text-[#f3ce90]' : 'border-white/10 bg-transparent text-[#f2e1d0] hover:border-white/20'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() =>
+                            setProductForm((prev) => ({
+                              ...prev,
+                              sizes: isChecked ? prev.sizes.filter((item) => item !== size) : [...prev.sizes, size],
+                            }))
+                          }
+                          className="sr-only"
+                        />
+                        {size}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
 
               <label className="block text-sm text-[#f2e1d0]">
                 <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-[#c8914f]">القسم</span>
@@ -927,13 +1302,20 @@ export default function AdminDashboard() {
               <button className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-[#f2e1d0]" onClick={() => setIsModalOpen(false)} type="button">
                 إلغاء
               </button>
-              <button className="rounded-full bg-[#8b1f3f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#a32648]" onClick={saveProduct} type="button">
-                حفظ المنتج
+              <button
+                className="rounded-full bg-[#8b1f3f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#a32648] disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={saveProduct}
+                type="button"
+                disabled={isSavingProduct}
+              >
+                {isSavingProduct ? 'جارٍ الحفظ...' : 'حفظ المنتج'}
               </button>
             </div>
           </div>
         </div>
+          )}
+        </div>
       )}
-    </div>
+    </>
   );
 }

@@ -6,10 +6,10 @@ export interface Product {
   oldPrice?: number;
   image: string;
   tag?: string;
+  isBestSeller?: boolean;
   category: 'women' | 'men' | 'islamic';
   description?: string;
   sizes?: string[];
-  colors?: string[];
   thumbnails?: string[];
 }
 
@@ -25,12 +25,54 @@ export interface CartItem {
 }
 
 export interface OrderItem {
+  productId?: string;
   name: string;
   size: string;
   quantity: number;
   price: number;
 }
 
+export const EGYPTIAN_GOVERNORATES = [
+  'القاهرة',
+  'الجيزة',
+  'الإسكندرية',
+  'الدقهلية',
+  'الشرقية',
+  'القليوبية',
+  'كفر الشيخ',
+  'الغربية',
+  'المنوفية',
+  'البحيرة',
+  'الإسماعيلية',
+  'بورسعيد',
+  'السويس',
+  'دمياط',
+  'المنيا',
+  'بني سويف',
+  'الفيوم',
+  'أسيوط',
+  'مطروح',
+  'شمال سيناء',
+  'جنوب سيناء',
+  'الوادى الجديد',
+  'البحر الأحمر',
+  'الأقصر',
+  'أسوان',
+  'قنا',
+  'سوهاج',
+] as const;
+
+export type EgyptianGovernorate = (typeof EGYPTIAN_GOVERNORATES)[number];
+
+export interface CustomerOrderPayload {
+  fullName: string;
+  phone: string;
+  governorate: string;
+  address: string;
+  notes?: string;
+}
+
+export type OrderStatus = 'قيد الانتظار' | 'قيد التجهيز' | 'تم الشحن' | 'تم التوصيل';
 export type PaymentMethod = 'الدفع عند الاستلام' | 'دفع إلكتروني';
 export type ElectronicPaymentMethod = 'إنستا باي' | 'فودافون كاش';
 export type PaymentStatus = 'جاري الفحص' | 'تم القبول' | 'خطأ في الدفع';
@@ -40,16 +82,19 @@ export interface Order {
   orderCode: string;
   customerName: string;
   phone: string;
+  governorate?: string;
   address: string;
   notes?: string;
   total: number;
-  status: 'قيد الانتظار' | 'قيد التجهيز' | 'تم الشحن' | 'تم التوصيل';
+  status: OrderStatus;
   createdAt: string;
+  deliveredAt?: string;
+  userId?: string;
   items: OrderItem[];
-  paymentMethod: PaymentMethod;
+  paymentMethod?: PaymentMethod;
   electronicMethod?: ElectronicPaymentMethod;
   screenshotUrl?: string;
-  paymentStatus: PaymentStatus;
+  paymentStatus?: PaymentStatus;
 }
 
 export interface CategoryInfo {
@@ -57,3 +102,4 @@ export interface CategoryInfo {
   title: string;
   description: string;
 }
+
