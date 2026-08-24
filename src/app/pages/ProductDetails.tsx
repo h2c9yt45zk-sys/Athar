@@ -149,7 +149,7 @@ export const ProductDetails: React.FC = () => {
                       </div>
                       <div className="space-y-1 p-3">
                         <h4 className="line-clamp-2 text-sm font-semibold text-[#4A0E17]">{item.name}</h4>
-                        <p className="text-xs text-[#5A4A3F]">{item.price.toLocaleString()} ج.م</p>
+                        <p className="text-xs text-black font-semibold">{item.price.toLocaleString()} ج.م</p>
                       </div>
                     </button>
                   );

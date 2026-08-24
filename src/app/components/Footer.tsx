@@ -4,7 +4,7 @@ const logoUrl = new URL('../../../Athar Logo.jpeg', import.meta.url).href;
 
 export const Footer: React.FC = () => {
   return (
-    <footer className="w-full py-section-gap bg-white border-t border-[#D4AF37]/20 text-[#4A0E17]">
+    <footer className="w-full py-section-gap bg-white border-t border-[#4A0E17]/20 text-[#4A0E17]">
       <div className="mx-auto flex items-center justify-center px-margin-desktop">
         <div className="flex flex-col items-center justify-center gap-4 rounded-3xl bg-white/0 px-6 py-8 shadow-sm">
           <div className="flex h-[220px] w-[220px] items-center justify-center overflow-hidden rounded-full bg-white shadow-lg">

@@ -168,7 +168,7 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({
             <button
               type="button"
               onClick={onBack}
-              className="w-full rounded-full border border-white/10 bg-transparent px-6 py-3 text-sm text-[#f2e0ce] transition hover:border-[#d8b56a] hover:text-white sm:w-auto"
+              className="w-full rounded-full border border-white/10 bg-transparent px-6 py-3 text-sm text-[#f2e0ce] transition hover:border-white/30 hover:text-white sm:w-auto"
             >
               العودة إلى السلة
             </button>

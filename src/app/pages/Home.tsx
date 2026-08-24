@@ -72,13 +72,13 @@ function CategorySection({ category }: { category: { id: string; title: string; 
 
             <div className="flex flex-1 flex-col justify-between p-4 text-right">
               <div>
-                <p className="text-[10px] uppercase tracking-[0.2em] text-[#4A0E17]">{product.tag || 'الأكثر مبيعاً'}</p>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-black">{product.tag || 'الأكثر مبيعاً'}</p>
                 <h3 className="mt-2 text-lg font-semibold text-[#4A0E17]">{product.name}</h3>
-                <p className="mt-1 text-[11px] leading-5 text-[#5A4A3F]">{product.subtitle}</p>
+                <p className="mt-1 text-[11px] leading-5 text-black">{product.subtitle}</p>
               </div>
 
               <div className="mt-4 flex items-center justify-between gap-3">
-                <span className="text-base font-bold text-[#D4AF37]">{product.price?.toLocaleString()} ج.م</span>
+                <span className="text-base font-bold text-black">{product.price?.toLocaleString()} ج.م</span>
                 <Link
                   to={`/product/${product.id}`}
                   className="inline-flex items-center justify-center rounded-full bg-[#4A0E17] px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-[#3b0b12]"
@@ -133,13 +133,13 @@ export const Home: React.FC = () => {
 
                   <div className="flex flex-1 flex-col justify-between p-4 text-right">
                     <div>
-                      <p className="text-[10px] uppercase tracking-[0.2em] text-[#4A0E17]">{product.tag || 'الأكثر مبيعاً'}</p>
+                      <p className="text-[10px] uppercase tracking-[0.2em] text-black">{product.tag || 'الأكثر مبيعاً'}</p>
                       <h3 className="mt-2 text-lg font-semibold text-[#4A0E17]">{product.name}</h3>
-                      <p className="mt-1 text-[11px] leading-5 text-[#5A4A3F]">{product.subtitle}</p>
+                      <p className="mt-1 text-[11px] leading-5 text-black">{product.subtitle}</p>
                     </div>
 
                     <div className="mt-4 flex items-center justify-between gap-3">
-                      <span className="text-base font-bold text-[#D4AF37]">{product.price?.toLocaleString()} ج.م</span>
+                      <span className="text-base font-bold text-black">{product.price?.toLocaleString()} ج.م</span>
                       <Link
                         to={`/product/${product.id}`}
                         className="inline-flex items-center justify-center rounded-full bg-[#4A0E17] px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-[#3b0b12]"

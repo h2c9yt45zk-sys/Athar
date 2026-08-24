@@ -135,8 +135,14 @@ export class ProductService {
       });
 
     if (uploadError) {
+      console.error('Full Supabase Error:', uploadError);
       console.error("Supabase storage upload error in bucket 'images':", uploadError);
-      throw new Error(uploadError.message || "Failed to upload image to Supabase Storage bucket 'images'");
+      const msg =
+        uploadError.message ||
+        (uploadError as any).error_description ||
+        (uploadError as any).error ||
+        "Failed to upload image to Supabase Storage bucket 'images'";
+      throw new Error(msg);
     }
 
     // 2. Retrieve the permanent Public URL using supabase.storage.from('images').getPublicUrl(...)
@@ -145,7 +151,9 @@ export class ProductService {
       .getPublicUrl(uploadData?.path || filePath);
 
     if (!publicUrlData?.publicUrl) {
-      throw new Error("Supabase storage failed to return a public URL from bucket 'images'");
+      const err = new Error("Supabase storage failed to return a public URL from bucket 'images'");
+      console.error('Full Supabase Error:', err);
+      throw err;
     }
 
     console.log("Successfully retrieved permanent public URL from 'images' bucket:", publicUrlData.publicUrl);
@@ -159,13 +167,17 @@ export class ProductService {
     const { data, error } = await supabase.from('products').insert([payload]).select().single();
 
     if (error) {
+      console.error('Full Supabase Error:', error);
       console.error('Supabase createProduct failed with payload:', payload, error);
-      throw new Error(error.message || 'Failed to create product in Supabase');
+      const msg = error.message || error.details || error.hint || 'Failed to create product in Supabase';
+      throw new Error(msg);
     }
 
     if (!data) {
+      const err = new Error('Supabase createProduct returned no product data');
+      console.error('Full Supabase Error:', err);
       console.error('Supabase createProduct returned no data for payload:', payload);
-      throw new Error('Supabase createProduct returned no product data');
+      throw err;
     }
 
     return normalizeProduct(data);
@@ -183,13 +195,17 @@ export class ProductService {
       .single();
 
     if (error) {
+      console.error('Full Supabase Error:', error);
       console.error('Supabase updateProduct failed:', error);
-      throw new Error(error.message || 'Failed to update product in Supabase');
+      const msg = error.message || error.details || error.hint || 'Failed to update product in Supabase';
+      throw new Error(msg);
     }
 
     if (!data) {
+      const err = new Error('Supabase updateProduct returned no product data');
+      console.error('Full Supabase Error:', err);
       console.error('Supabase updateProduct returned no data for product id:', product.id);
-      throw new Error('Supabase updateProduct returned no product data');
+      throw err;
     }
 
     return normalizeProduct(data);

@@ -157,7 +157,7 @@ export const OrderTracking: React.FC = () => {
         </div>
 
         {/* Search Input Box */}
-        <div className="mt-8 rounded-[28px] border border-[#d8b56a]/25 bg-[#1b0a12]/90 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-md">
+        <div className="mt-8 rounded-[28px] border border-[#d8b56a]/30 bg-[#1b0a12]/90 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-md">
           <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row">
             <div className="relative flex-1">
               <input
@@ -181,7 +181,7 @@ export const OrderTracking: React.FC = () => {
             <button
               type="submit"
               disabled={isLoading}
-              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#D4AF37] px-8 py-3.5 text-sm font-bold text-[#4A0E17] transition hover:bg-[#c49e2f] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#D4AF37] px-8 py-3.5 text-sm font-bold text-[#4A0E17] transition hover:bg-[#c49e2f] disabled:cursor-not-allowed disabled:opacity-60 shadow-md"
             >
               {isLoading ? (
                 <>
@@ -203,7 +203,7 @@ export const OrderTracking: React.FC = () => {
               <button
                 type="button"
                 onClick={() => handleRecentCodeClick(recentOrderCode)}
-                className="inline-flex items-center gap-1 rounded-full border border-[#d8b56a]/40 bg-[#d8b56a]/10 px-3 py-1 font-mono font-semibold text-[#f1dfbd] transition hover:bg-[#d8b56a]/20"
+                className="inline-flex items-center gap-1 rounded-full border border-[#d8b56a]/30 bg-[#d8b56a]/10 px-3 py-1 font-mono font-semibold text-[#f3ce90] transition hover:bg-[#d8b56a]/20"
               >
                 <span>{recentOrderCode}</span>
                 <span className="material-symbols-outlined text-xs !scale-x-100">arrow_forward</span>
@@ -224,7 +224,7 @@ export const OrderTracking: React.FC = () => {
         <div className="mt-8 space-y-8">
           {!searched && !orders.length && !isLoading && (
             <div className="flex flex-col items-center justify-center rounded-[28px] border border-white/10 bg-black/20 p-12 text-center text-[#e9d9c3]">
-              <span className="material-symbols-outlined text-6xl text-[#d8b56a]/60">local_shipping</span>
+              <span className="material-symbols-outlined text-6xl text-white/40">local_shipping</span>
               <h3 className="mt-4 text-lg font-semibold text-white">ابحث عن طلبك</h3>
               <p className="mt-1 max-w-sm text-xs leading-6 text-[#e9d9c3]/70">
                 أدخل رقم هاتفك أو رمز تتبع الطلب الذي حصلت عليه أثناء إتمام الطلب لمعرفة خط سير شحنتك.
@@ -238,7 +238,7 @@ export const OrderTracking: React.FC = () => {
             return (
               <article
                 key={order.id || order.orderCode || orderIndex}
-                className="overflow-hidden rounded-[28px] border border-[#d8b56a]/20 bg-[#1b0a12]/95 shadow-[0_30px_90px_rgba(0,0,0,0.5)]"
+                className="overflow-hidden rounded-[28px] border border-[#d8b56a]/30 bg-[#1b0a12]/95 shadow-[0_30px_90px_rgba(0,0,0,0.5)]"
               >
                 {/* Order Top Bar */}
                 <div className="border-b border-white/10 bg-[#250d19] p-6">
@@ -248,13 +248,13 @@ export const OrderTracking: React.FC = () => {
                         <span className="text-xs font-semibold uppercase tracking-wider text-[#d8b56a]">
                           رمز التتبع:
                         </span>
-                        <span className="font-mono text-xl font-bold tracking-widest text-white">
+                        <span className="font-mono text-xl font-bold tracking-widest text-[#D4AF37]">
                           {order.orderCode || order.id}
                         </span>
                         <button
                           type="button"
                           onClick={() => handleCopyCode(order.orderCode || order.id)}
-                          className="text-white/60 transition hover:text-[#d8b56a]"
+                          className="text-[#d8b56a]/60 transition hover:text-[#d8b56a]"
                           title="نسخ الرمز"
                         >
                           <span className="material-symbols-outlined text-sm !scale-x-100">
@@ -298,7 +298,7 @@ export const OrderTracking: React.FC = () => {
                             key={step.key}
                             className={`flex flex-col items-center rounded-2xl border p-4 text-center transition-all ${
                               isCurrent
-                                ? 'border-[#d8b56a] bg-[#d8b56a]/15 shadow-lg shadow-[#d8b56a]/10'
+                                ? 'border-[#d8b56a] bg-[#d8b56a]/15 text-[#f3ce90] shadow-lg shadow-[#d8b56a]/10'
                                 : isCompleted
                                   ? 'border-emerald-500/30 bg-emerald-950/20 text-emerald-200'
                                   : 'border-white/5 bg-white/[0.02] text-white/40'
@@ -319,7 +319,7 @@ export const OrderTracking: React.FC = () => {
                             </div>
                             <p
                               className={`text-xs font-semibold ${
-                                isCurrent ? 'text-[#d8b56a]' : isCompleted ? 'text-emerald-300' : 'text-white/60'
+                                isCurrent ? 'text-[#f3ce90]' : isCompleted ? 'text-emerald-300' : 'text-white/60'
                               }`}
                             >
                               {step.label}
@@ -407,7 +407,7 @@ export const OrderTracking: React.FC = () => {
                             <p className="text-white">
                               {item.quantity} × {Number(item.price || 0).toLocaleString()} ج.م
                             </p>
-                            <p className="text-xs text-[#d8b56a] font-bold">
+                            <p className="text-xs text-[#D4AF37]">
                               {(Number(item.quantity || 1) * Number(item.price || 0)).toLocaleString()} ج.م
                             </p>
                           </div>

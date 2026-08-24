@@ -461,8 +461,9 @@ export default function AdminDashboard() {
       setModalError('');
       console.log('Product saved successfully with permanent image URL:', savedProduct.image);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'حدث خطأ غير متوقع أثناء الحفظ';
+      console.error('Full Supabase Error:', error);
       console.error('Failed to save product:', error);
+      const errorMessage = error instanceof Error ? error.message : 'حدث خطأ غير متوقع أثناء الحفظ';
       setModalError(`فشل حفظ المنتج: ${errorMessage}`);
     } finally {
       setIsSavingProduct(false);

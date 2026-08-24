@@ -75,14 +75,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       </div>
       <div className="flex justify-between items-start gap-3 flex-col md:flex-row p-3">
         <div className="text-right flex-1">
-          <h3 className="font-headline-md text-[17px] mb-1 group-hover:text-brand-burgundy transition-colors leading-tight">
+          <h3 className="font-headline-md text-[17px] mb-1 text-[#4A0E17] leading-tight">
             {product.name}
           </h3>
-          <p className="font-label-sm text-[10px] text-[#5A4A3F] tracking-widest uppercase">
+          <p className="font-label-sm text-[10px] text-black tracking-widest uppercase">
             {product.subtitle}
           </p>
         </div>
-        <span className="font-body-md text-[12px] text-[#D4AF37] font-bold whitespace-nowrap price">
+        <span className="font-body-md text-[12px] text-black font-bold whitespace-nowrap price">
           {product.price.toLocaleString()} ج.م
         </span>
       </div>

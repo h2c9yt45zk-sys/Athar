@@ -197,7 +197,7 @@ export const CartDrawer: React.FC = () => {
                     </div>
                     <button
                       onClick={() => removeFromCart(item.id)}
-                      className="text-[#d8c9b6] hover:text-[#ff9c9c] transition-colors"
+                      className="text-[#d8c9b6] hover:text-[#d8b56a] transition-colors"
                       title="حذف"
                     >
                       <span className="material-symbols-outlined text-sm !scale-x-100">delete</span>
@@ -226,11 +226,11 @@ export const CartDrawer: React.FC = () => {
                 /* Step 1: Simple Tracking Code View with Copy Prompt */
                 <div className="flex min-h-[300px] flex-col items-center justify-center gap-4 rounded-[28px] border border-[#d8b56a]/30 bg-[#220912]/95 p-6 text-center shadow-[0_30px_90px_rgba(0,0,0,0.55)]">
                   {orderCode && (
-                    <div className="w-full rounded-2xl border border-[#d8b56a]/40 bg-[#16060c] p-6 text-center shadow-lg">
+                    <div className="w-full rounded-2xl border border-[#d8b56a]/30 bg-[#16060c] p-6 text-center shadow-lg">
                       <p className="text-xs font-medium uppercase tracking-wider text-[#d8b56a]">كود التتبع</p>
                       
                       <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/40 p-3.5">
-                        <span className="font-mono text-xl font-extrabold tracking-widest text-white sm:text-2xl">
+                        <span className="font-mono text-xl font-extrabold tracking-widest text-[#D4AF37] sm:text-2xl">
                           {orderCode}
                         </span>
                         <button
@@ -261,14 +261,14 @@ export const CartDrawer: React.FC = () => {
                   </div>
 
                   {orderCode && (
-                    <div className="w-full rounded-2xl border border-[#d8b56a]/40 bg-[#16060c] p-4 text-center shadow-lg">
+                    <div className="w-full rounded-2xl border border-[#d8b56a]/30 bg-[#16060c] p-4 text-center shadow-lg">
                       <p className="text-xs font-medium uppercase tracking-wider text-[#d8b56a]">رمز تتبع طلبك</p>
                       <div className="mt-2 flex items-center justify-center gap-3">
-                        <span className="font-mono text-xl font-bold tracking-widest text-white">{orderCode}</span>
+                        <span className="font-mono text-xl font-bold tracking-widest text-[#D4AF37]">{orderCode}</span>
                         <button
                           type="button"
                           onClick={handleCopyCode}
-                          className="inline-flex items-center gap-1 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-[#f1dfbd] transition hover:bg-white/10"
+                          className="inline-flex items-center gap-1 rounded-lg border border-[#d8b56a]/30 bg-[#d8b56a]/10 px-3 py-1.5 text-xs font-semibold text-[#f1dfbd] transition hover:bg-[#d8b56a]/20"
                           title="نسخ مجدداً"
                         >
                           <span className="material-symbols-outlined text-sm !scale-x-100">
@@ -306,7 +306,7 @@ export const CartDrawer: React.FC = () => {
           <div className="p-6 border-t border-white/10 bg-[#270913]">
             <div className="flex justify-between items-center mb-5">
               <span className="font-body-md text-[#d8c9b6]">المجموع الفرعي</span>
-              <span className="font-headline-md text-[#d8b56a]">{cartSubtotal.toLocaleString()} ج.م</span>
+              <span className="font-headline-md text-[#d8b56a] font-bold">{cartSubtotal.toLocaleString()} ج.م</span>
             </div>
             <button
               onClick={handleStartCheckout}
