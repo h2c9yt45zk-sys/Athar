@@ -2,8 +2,10 @@ import { CATEGORIES } from '../data/data';
 import { supabase } from '../lib/supabase';
 import { Product } from '../types';
 
-const DEFAULT_PRODUCT_IMAGE =
+export const DEFAULT_PRODUCT_IMAGE =
   'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=900&q=80';
+
+export const PRODUCT_STORAGE_BUCKET = 'images';
 
 const generateProductId = (): string => `p-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
@@ -49,7 +51,10 @@ const toDbProduct = (product: Product) => {
   const safeName = String(product.name ?? '').trim();
   const safeSubtitle = String(product.subtitle ?? (safeName || 'Untitled Product')).trim();
   const safeDescription = String(product.description ?? '').trim();
-  const safeImage = String(product.image ?? '').trim() || DEFAULT_PRODUCT_IMAGE;
+  let safeImage = String(product.image ?? '').trim();
+  if (!safeImage || safeImage.startsWith('blob:') || safeImage.startsWith('data:')) {
+    safeImage = DEFAULT_PRODUCT_IMAGE;
+  }
   const safeCategory = normalizeCategory(String(product.category ?? 'women'));
   const safeSizes = Array.isArray(product.sizes) ? product.sizes.filter(Boolean).map(String) : [];
   const safeThumbnails = Array.isArray(product.thumbnails) ? product.thumbnails.filter(Boolean).map(String) : [];
@@ -100,37 +105,51 @@ export class ProductService {
     return this.fetchProducts();
   }
 
-  static async uploadProductImage(file: File, fallbackUrl = ''): Promise<string> {
-    const safeFallbackUrl = fallbackUrl.trim() || DEFAULT_PRODUCT_IMAGE;
+  static async uploadProductImage(file: File): Promise<string> {
+    if (!file) {
+      throw new Error('No image file provided for upload');
+    }
 
-    try {
-      const sanitizedName = file.name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9_.-]/g, '');
-      const filePath = `products/${Date.now()}-${sanitizedName}`;
+    const fileExt = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const sanitizedBase = file.name
+      .replace(/\.[^/.]+$/, '')
+      .replace(/\s+/g, '-')
+      .replace(/[^a-zA-Z0-9_-]/g, '');
+    const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const filePath = `products/${uniqueSuffix}-${sanitizedBase || 'image'}.${fileExt || 'jpg'}`;
 
-      console.log('Uploading product image to Supabase storage:', { filePath, fileName: file.name, type: file.type });
+    console.log("Uploading product image to Supabase Storage bucket 'images':", {
+      filePath,
+      fileName: file.name,
+      fileType: file.type,
+      size: file.size,
+    });
 
-      const { data, error } = await supabase.storage.from('product-images').upload(filePath, file, {
+    // 1. Upload the selected image file directly to the 'images' Supabase Storage bucket
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('images')
+      .upload(filePath, file, {
+        cacheControl: '3600',
         upsert: true,
         contentType: file.type || 'image/jpeg',
       });
 
-      if (error) {
-        console.warn('Supabase storage upload failed; using fallback image URL instead.', error);
-        return safeFallbackUrl;
-      }
-
-      const { data: publicUrlData } = supabase.storage.from('product-images').getPublicUrl(data?.path || filePath);
-
-      if (publicUrlData?.publicUrl) {
-        return publicUrlData.publicUrl;
-      }
-
-      console.warn('Supabase storage returned no public URL; using fallback image URL instead.');
-      return safeFallbackUrl;
-    } catch (error) {
-      console.warn('Product image upload threw an unexpected error; using fallback image URL instead.', error);
-      return safeFallbackUrl;
+    if (uploadError) {
+      console.error("Supabase storage upload error in bucket 'images':", uploadError);
+      throw new Error(uploadError.message || "Failed to upload image to Supabase Storage bucket 'images'");
     }
+
+    // 2. Retrieve the permanent Public URL using supabase.storage.from('images').getPublicUrl(...)
+    const { data: publicUrlData } = supabase.storage
+      .from('images')
+      .getPublicUrl(uploadData?.path || filePath);
+
+    if (!publicUrlData?.publicUrl) {
+      throw new Error("Supabase storage failed to return a public URL from bucket 'images'");
+    }
+
+    console.log("Successfully retrieved permanent public URL from 'images' bucket:", publicUrlData.publicUrl);
+    return publicUrlData.publicUrl;
   }
 
   static async createProduct(product: Product): Promise<Product> {

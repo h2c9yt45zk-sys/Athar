@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { EGYPTIAN_GOVERNORATES, Product, CategoryInfo, PaymentStatus, Order } from '../types';
 import { AdminAuthService } from '../services/adminAuthService';
-import { ProductService } from '../services/productService';
+import { ProductService, DEFAULT_PRODUCT_IMAGE } from '../services/productService';
 import { OrderService } from '../services/orderService';
 import {
   BadgeCheck,
@@ -169,6 +169,7 @@ export default function AdminDashboard() {
   const [imagePreview, setImagePreview] = useState<string>('');
   const [imageUploadFile, setImageUploadFile] = useState<File | null>(null);
   const [isSavingProduct, setIsSavingProduct] = useState(false);
+  const [modalError, setModalError] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return sessionStorage.getItem(ADMIN_SESSION_KEY) === 'true';
@@ -280,7 +281,6 @@ export default function AdminDashboard() {
     const previewUrl = URL.createObjectURL(file);
     setImageUploadFile(file);
     setImagePreview(previewUrl);
-    setProductForm((prev) => ({ ...prev, imageUrl: previewUrl }));
     console.log('Local image preview prepared for upload:', { name: file.name, type: file.type, size: file.size });
   };
 
@@ -360,6 +360,7 @@ export default function AdminDashboard() {
     setProductForm(emptyProductForm(selectedCategory));
     setImagePreview('');
     setImageUploadFile(null);
+    setModalError('');
     setIsModalOpen(true);
   };
 
@@ -376,6 +377,7 @@ export default function AdminDashboard() {
     });
     setImagePreview(product.image);
     setImageUploadFile(null);
+    setModalError('');
     setIsModalOpen(true);
   };
 
@@ -384,42 +386,44 @@ export default function AdminDashboard() {
     const cleanedDescription = productForm.description.trim();
     const normalizedSizes = productForm.sizes.filter(Boolean);
 
+    setModalError('');
+
     if (!cleanedName) {
-      setBestSellerNotice('يرجى إدخال اسم المنتج قبل الحفظ.');
+      setModalError('يرجى إدخال اسم المنتج قبل الحفظ.');
       console.error('Attempted to save product without name.');
       return;
     }
 
     if (Number(productForm.price) <= 0) {
-      setBestSellerNotice('يرجى إدخال سعر صالح للمنتج.');
+      setModalError('يرجى إدخال سعر صالح للمنتج.');
       console.error('Attempted to save product with invalid price:', productForm.price);
       return;
     }
 
     if (!normalizedSizes.length) {
-      setBestSellerNotice('يرجى اختيار مقاس واحد على الأقل للمنتج.');
+      setModalError('يرجى اختيار مقاس واحد على الأقل للمنتج.');
       console.error('Attempted to save product without sizes selected.');
       return;
     }
 
-    let finalImageUrl = productForm.imageUrl.trim();
-    const fallbackImageUrl =
-      finalImageUrl || 'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=900&q=80';
-
     setIsSavingProduct(true);
     setBestSellerNotice('');
-    console.log('Submitting product to Supabase:', {
-      form: productForm,
-      normalizedSizes,
-      imageUploadFile: imageUploadFile ? { name: imageUploadFile.name, type: imageUploadFile.type, size: imageUploadFile.size } : null,
-    });
 
     try {
+      let finalImageUrl = productForm.imageUrl.trim();
+
+      // 1. If an image file was selected, upload it directly to Supabase Storage and get its permanent Public URL
       if (imageUploadFile) {
-        const uploadedImageUrl = await ProductService.uploadProductImage(imageUploadFile, finalImageUrl);
-        finalImageUrl = uploadedImageUrl || fallbackImageUrl;
-        console.log('Product image resolved for save:', finalImageUrl);
+        console.log('Uploading selected image to Supabase Storage before persisting product...');
+        const uploadedPublicUrl = await ProductService.uploadProductImage(imageUploadFile);
+        finalImageUrl = uploadedPublicUrl;
+        console.log('Obtained permanent Public URL for image:', finalImageUrl);
+      } else if (finalImageUrl.startsWith('blob:')) {
+        // Guard against any leftover temporary blob URLs when no new file is uploaded
+        finalImageUrl = '';
       }
+
+      const resolvedImage = finalImageUrl || DEFAULT_PRODUCT_IMAGE;
 
       const productPayload: Product = {
         id: editingProductId ?? `p-${Date.now()}`,
@@ -428,11 +432,16 @@ export default function AdminDashboard() {
         category: productForm.category,
         price: Number(productForm.price) || 0,
         description: cleanedDescription,
-        image: finalImageUrl || fallbackImageUrl,
+        image: resolvedImage,
         sizes: normalizedSizes,
-        isBestSeller: editingProductId ? products.find((product) => product.id === editingProductId)?.isBestSeller ?? false : false,
+        isBestSeller: editingProductId
+          ? products.find((product) => product.id === editingProductId)?.isBestSeller ?? false
+          : false,
       };
 
+      console.log('Persisting product record to Supabase database:', productPayload);
+
+      // 3. Save permanent public URL into the 'image' column of 'products' table
       const savedProduct = editingProductId
         ? await ProductService.updateProduct(productPayload)
         : await ProductService.createProduct(productPayload);
@@ -449,11 +458,12 @@ export default function AdminDashboard() {
       setProductForm(emptyProductForm(savedProduct.category));
       setImagePreview('');
       setImageUploadFile(null);
-      console.log('Product saved successfully:', savedProduct);
+      setModalError('');
+      console.log('Product saved successfully with permanent image URL:', savedProduct.image);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown save error';
+      const errorMessage = error instanceof Error ? error.message : 'حدث خطأ غير متوقع أثناء الحفظ';
       console.error('Failed to save product:', error);
-      setBestSellerNotice(`فشل حفظ المنتج: ${errorMessage}`);
+      setModalError(`فشل حفظ المنتج: ${errorMessage}`);
     } finally {
       setIsSavingProduct(false);
     }
@@ -1298,17 +1308,31 @@ export default function AdminDashboard() {
               </label>
             </div>
 
+            {modalError && (
+              <div className="mt-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">
+                {modalError}
+              </div>
+            )}
+
             <div className="mt-6 flex justify-end gap-3">
-              <button className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-[#f2e1d0]" onClick={() => setIsModalOpen(false)} type="button">
+              <button
+                className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-[#f2e1d0]"
+                onClick={() => setIsModalOpen(false)}
+                type="button"
+                disabled={isSavingProduct}
+              >
                 إلغاء
               </button>
               <button
-                className="rounded-full bg-[#8b1f3f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#a32648] disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full bg-[#8b1f3f] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#a32648] disabled:cursor-not-allowed disabled:opacity-60 flex items-center gap-2"
                 onClick={saveProduct}
                 type="button"
                 disabled={isSavingProduct}
               >
-                {isSavingProduct ? 'جارٍ الحفظ...' : 'حفظ المنتج'}
+                {isSavingProduct && (
+                  <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                )}
+                {isSavingProduct ? 'جارٍ رفع الصورة وحفظ المنتج...' : 'حفظ المنتج'}
               </button>
             </div>
           </div>
