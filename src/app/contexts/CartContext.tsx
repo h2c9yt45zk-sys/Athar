@@ -195,11 +195,9 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       price: item.price,
     }));
 
-    const generatedCode = OrderService.generateOrderCode(orders);
-
     const initialOrder: Order = {
       id: `ORD-${Date.now()}`,
-      orderCode: generatedCode,
+      orderCode: '',
       customerName: customer.fullName,
       phone: customer.phone,
       governorate: customer.governorate,

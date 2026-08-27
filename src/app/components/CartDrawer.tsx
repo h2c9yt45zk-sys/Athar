@@ -16,9 +16,7 @@ export const CartDrawer: React.FC = () => {
   } = useCart();
   const [stage, setStage] = useState<'cart' | 'checkout' | 'success'>('cart');
   const [orderId, setOrderId] = useState<string | null>(null);
-  const [orderCode, setOrderCode] = useState<string | null>(null);
-  const [hasCopied, setHasCopied] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
+  const [orderPhone, setOrderPhone] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string>('');
   const [checkoutInitialValues, setCheckoutInitialValues] = useState<CustomerOrderPayload>({
@@ -33,23 +31,18 @@ export const CartDrawer: React.FC = () => {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isCartOpen) {
-        if (stage === 'success' && !hasCopied) {
-          return;
-        }
         toggleCart(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isCartOpen, toggleCart, stage, hasCopied]);
+  }, [isCartOpen, toggleCart, stage]);
 
   useEffect(() => {
     if (!isCartOpen) {
       setStage('cart');
       setOrderId(null);
-      setOrderCode(null);
-      setHasCopied(false);
-      setIsCopied(false);
+      setOrderPhone(null);
       setIsSubmitting(false);
       setCheckoutError('');
     }
@@ -75,10 +68,7 @@ export const CartDrawer: React.FC = () => {
     try {
       const newOrder = await addOrder(customer, cart, cartSubtotal);
       setOrderId(newOrder.id);
-      setOrderCode(newOrder.orderCode);
-      if (typeof window !== 'undefined' && newOrder.orderCode) {
-        sessionStorage.setItem('athar_last_order_code', newOrder.orderCode);
-      }
+      setOrderPhone(newOrder.phone || customer.phone || null);
       setStage('success');
     } catch (error: any) {
       console.error('Failed to submit order:', error);
@@ -89,26 +79,16 @@ export const CartDrawer: React.FC = () => {
     }
   };
 
-  const handleCopyCode = () => {
-    if (!orderCode) return;
-    navigator.clipboard.writeText(orderCode);
-    setHasCopied(true);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 3000);
-  };
-
   const handleTrackOrder = () => {
-    if (!hasCopied) return;
     toggleCart(false);
-    if (orderCode) {
-      navigate(`/tracking?code=${encodeURIComponent(orderCode)}`);
+    if (orderPhone) {
+      navigate(`/tracking?phone=${encodeURIComponent(orderPhone)}`);
     } else {
       navigate('/tracking');
     }
   };
 
   const handleReturnHome = () => {
-    if (!hasCopied) return;
     toggleCart(false);
     navigate('/');
   };
@@ -123,12 +103,7 @@ export const CartDrawer: React.FC = () => {
         className={`fixed inset-0 bg-black/50 z-[60] transition-opacity duration-500 ${
           isCartOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
-        onClick={() => {
-          if (stage === 'success' && !hasCopied) {
-            return;
-          }
-          toggleCart(false);
-        }}
+        onClick={() => toggleCart(false)}
       />
 
       <aside
@@ -137,24 +112,12 @@ export const CartDrawer: React.FC = () => {
         }`}
       >
         <div className="p-6 border-b border-white/10 flex justify-between items-center bg-[#270913]">
-          <h2 className="font-headline-md text-[#f3e1c3]">
-            {stage === 'checkout' ? 'إتمام الطلب' : stage === 'success' ? (hasCopied ? 'تم تأكيد الطلب' : 'رمز تتبع الطلب') : 'حقيبة التسوق'}
-          </h2>
+          <h2 className="font-headline-md text-[#f3e1c3]">{stage === 'checkout' ? 'إتمام الطلب' : stage === 'success' ? 'تم تأكيد الطلب' : 'حقيبة التسوق'}</h2>
           <button
-            className={`transition-colors ${
-              stage === 'success' && !hasCopied
-                ? 'text-white/20 cursor-not-allowed'
-                : 'text-[#f3e1c3] hover:text-[#d8b56a]'
-            }`}
-            onClick={() => {
-              if (stage === 'success' && !hasCopied) {
-                return;
-              }
-              toggleCart(false);
-            }}
-            disabled={stage === 'success' && !hasCopied}
+            className="transition-colors text-[#f3e1c3] hover:text-[#d8b56a]"
+            onClick={() => toggleCart(false)}
             aria-label="Close Cart"
-            title={stage === 'success' && !hasCopied ? 'يرجى نسخ رمز التتبع أولاً للمتابعة' : 'إغلاق'}
+            title="إغلاق"
           >
             <span className="material-symbols-outlined !scale-x-100">close</span>
           </button>
@@ -222,82 +185,30 @@ export const CartDrawer: React.FC = () => {
 
           {stage === 'success' && (
             <div className="space-y-4">
-              {!hasCopied ? (
-                /* Step 1: Simple Tracking Code View with Copy Prompt */
-                <div className="flex min-h-[300px] flex-col items-center justify-center gap-4 rounded-[28px] border border-[#d8b56a]/30 bg-[#220912]/95 p-6 text-center shadow-[0_30px_90px_rgba(0,0,0,0.55)]">
-                  {orderCode && (
-                    <div className="w-full rounded-2xl border border-[#d8b56a]/30 bg-[#16060c] p-6 text-center shadow-lg">
-                      <p className="text-xs font-medium uppercase tracking-wider text-[#d8b56a]">كود التتبع</p>
-                      
-                      <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/40 p-3.5">
-                        <span className="font-mono text-xl font-extrabold tracking-widest text-[#D4AF37] sm:text-2xl">
-                          {orderCode}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={handleCopyCode}
-                          className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#D4AF37] px-4 py-2.5 text-xs font-bold text-[#4A0E17] transition hover:bg-[#c49e2f] active:scale-95 shadow-md"
-                        >
-                          <span className="material-symbols-outlined text-base !scale-x-100">content_copy</span>
-                          <span>نسخ الكود</span>
-                        </button>
-                      </div>
-
-                      <p className="mt-4 text-xs font-medium text-[#f1dfbd]">
-                        يرجي نسخ الكود حتي نتمكن من استلام طلبك
-                      </p>
-                    </div>
-                  )}
+              <div className="flex min-h-[360px] flex-col items-center justify-center gap-6 rounded-[28px] border border-[#d8b56a]/30 bg-[#220912]/95 p-6 text-center shadow-[0_30px_90px_rgba(0,0,0,0.55)]">
+                <span className="material-symbols-outlined text-7xl text-[#d8b56a]">check_circle</span>
+                <div className="space-y-2">
+                  <h3 className="text-2xl font-bold text-white">تم استلام طلبك بنجاح</h3>
+                  <p className="text-sm leading-6 text-[#e7dcc8]">شكراً لتسوقك من أثر. تم تأكيد طلبك وجارٍ تجهيزه بعناية.</p>
                 </div>
-              ) : (
-                /* Step 2: Confirmation Message & Order Summary */
-                <div className="flex min-h-[360px] flex-col items-center justify-center gap-6 rounded-[28px] border border-[#d8b56a]/30 bg-[#220912]/95 p-6 text-center shadow-[0_30px_90px_rgba(0,0,0,0.55)]">
-                  <span className="material-symbols-outlined text-7xl text-[#d8b56a]">check_circle</span>
-                  <div className="space-y-2">
-                    <h3 className="text-2xl font-bold text-white">تم استلام طلبك بنجاح</h3>
-                    <p className="text-sm leading-6 text-[#e7dcc8]">
-                      شكراً لتسوقك من أثر. تم تأكيد طلبك وجارٍ تجهيزه بعناية.
-                    </p>
-                  </div>
 
-                  {orderCode && (
-                    <div className="w-full rounded-2xl border border-[#d8b56a]/30 bg-[#16060c] p-4 text-center shadow-lg">
-                      <p className="text-xs font-medium uppercase tracking-wider text-[#d8b56a]">رمز تتبع طلبك</p>
-                      <div className="mt-2 flex items-center justify-center gap-3">
-                        <span className="font-mono text-xl font-bold tracking-widest text-[#D4AF37]">{orderCode}</span>
-                        <button
-                          type="button"
-                          onClick={handleCopyCode}
-                          className="inline-flex items-center gap-1 rounded-lg border border-[#d8b56a]/30 bg-[#d8b56a]/10 px-3 py-1.5 text-xs font-semibold text-[#f1dfbd] transition hover:bg-[#d8b56a]/20"
-                          title="نسخ مجدداً"
-                        >
-                          <span className="material-symbols-outlined text-sm !scale-x-100">
-                            {isCopied ? 'done' : 'content_copy'}
-                          </span>
-                          <span>{isCopied ? 'تم النسخ' : 'نسخ'}</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex w-full flex-col gap-3 sm:flex-row">
-                    <button
-                      type="button"
-                      onClick={handleTrackOrder}
-                      className="flex-1 rounded-full bg-[#D4AF37] px-6 py-3 text-sm font-semibold text-[#4A0E17] transition hover:bg-[#c49e2f] shadow-md"
-                    >
-                      تتبع طلبك الآن
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleReturnHome}
-                      className="flex-1 rounded-full border border-white/20 bg-white/5 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-                    >
-                      العودة للرئيسية
-                    </button>
-                  </div>
+                <div className="flex w-full flex-col gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={handleTrackOrder}
+                    className="flex-1 rounded-full bg-[#D4AF37] px-6 py-3 text-sm font-semibold text-[#4A0E17] transition hover:bg-[#c49e2f] shadow-md"
+                  >
+                    تتبع طلبك الآن
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleReturnHome}
+                    className="flex-1 rounded-full border border-white/20 bg-white/5 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                  >
+                    العودة للرئيسية
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
           )}
         </div>
