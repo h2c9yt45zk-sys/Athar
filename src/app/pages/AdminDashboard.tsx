@@ -500,7 +500,11 @@ export default function AdminDashboard() {
 
   const deleteProduct = async (productId: string) => {
     try {
-      await ProductService.deleteProduct(productId);
+      // Find the product to get its image URL for storage cleanup
+      const productToDelete = products.find((p) => p.id === productId);
+      const imageUrl = productToDelete?.image;
+
+      await ProductService.deleteProduct(productId, imageUrl);
       setProducts((prev) => prev.filter((product) => product.id !== productId));
       setProductToDeleteId(null);
     } catch (error) {
@@ -1220,7 +1224,7 @@ export default function AdminDashboard() {
               <label className="block text-sm text-[#f2e1d0]">
                 <span className="mb-1 block text-xs uppercase tracking-[0.25em] text-[#c8914f]">السعر</span>
                 <input
-                  className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition focus:border-[#c8914f]"
+                  className="w-full rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none transition focus:border-[#c8914f] appearance-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   onChange={(event) => setProductForm((prev) => ({ ...prev, price: Number(event.target.value) }))}
                   type="number"
                   value={productForm.price}

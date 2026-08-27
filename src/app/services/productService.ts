@@ -211,10 +211,42 @@ export class ProductService {
     return normalizeProduct(data);
   }
 
-  static async deleteProduct(productId: string): Promise<void> {
+  static async deleteProduct(productId: string, imageUrl?: string): Promise<void> {
+    // 1. Delete the associated image from Supabase Storage 'images' bucket
+    if (imageUrl) {
+      try {
+        // Extract the storage file path from the public URL
+        // Public URLs look like: https://<project>.supabase.co/storage/v1/object/public/images/products/...
+        const bucketMarker = '/storage/v1/object/public/images/';
+        const markerIndex = imageUrl.indexOf(bucketMarker);
+        if (markerIndex !== -1) {
+          const filePath = decodeURIComponent(imageUrl.substring(markerIndex + bucketMarker.length));
+          console.log('Deleting image from Supabase Storage bucket "images":', filePath);
+
+          const { error: storageError } = await supabase.storage
+            .from('images')
+            .remove([filePath]);
+
+          if (storageError) {
+            // Log but don't block product deletion if image removal fails
+            console.error('Failed to delete image from storage:', storageError);
+          } else {
+            console.log('Successfully deleted image from storage:', filePath);
+          }
+        } else {
+          console.log('Image URL does not point to Supabase Storage, skipping storage deletion:', imageUrl);
+        }
+      } catch (storageErr) {
+        // Log but don't block product deletion
+        console.error('Error during storage image deletion:', storageErr);
+      }
+    }
+
+    // 2. Delete the product record from the 'products' table
     const { error } = await supabase.from('products').delete().eq('id', productId);
 
     if (error) {
+      console.error('Full Supabase Error:', error);
       throw error;
     }
   }
