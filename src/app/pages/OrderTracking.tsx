@@ -1,18 +1,24 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { OrderService } from "../services/orderService";
-import type { Order, OrderStatus } from "../types";
+import { normalizeOrderStatus, type Order, type OrderStatus } from "../types";
 
 const ORDER_STEPS: Array<{ key: OrderStatus; label: string; description: string; icon: string }> = [
   {
-    key: "قيد الانتظار",
-    label: "تم استلام الطلب",
-    description: "تم تسجيل طلبك بنجاح وفي انتظار المراجعة والتأكيد.",
-    icon: "receipt_long",
+    key: "جاري التأكيد",
+    label: "جاري التأكيد",
+    description: "تم تسجيل طلبك بنجاح، ونحن ننتظر تأكيدك عبر الواتساب قبل المتابعة.",
+    icon: "verified_user",
+  },
+  {
+    key: "تم التأكيد",
+    label: "تم التأكيد",
+    description: "تمت الموافقة على طلبك، وجاري تجهيز الطلب الآن.",
+    icon: "check_circle",
   },
   {
     key: "قيد التجهيز",
-    label: "جاري التجهيز",
+    label: "قيد التجهيز",
     description: "يتم الآن تجهيز وتطريز طلبك بعناية تامة.",
     icon: "inventory_2",
   },
@@ -31,17 +37,21 @@ const ORDER_STEPS: Array<{ key: OrderStatus; label: string; description: string;
 ];
 
 const STEP_INDEX_MAP: Record<OrderStatus, number> = {
+  "جاري التأكيد": 0,
+  "تم التأكيد": 1,
+  "قيد التجهيز": 2,
+  "تم الشحن": 3,
+  "تم التوصيل": 4,
   "قيد الانتظار": 0,
-  "قيد التجهيز": 1,
-  "تم الشحن": 2,
-  "تم التوصيل": 3,
 };
 
 const statusBadgeStyles: Record<OrderStatus, string> = {
-  "قيد الانتظار": "bg-amber-500/15 text-amber-300 border-amber-400/30",
+  "جاري التأكيد": "bg-amber-500/15 text-amber-300 border-amber-400/30",
+  "تم التأكيد": "bg-cyan-500/15 text-cyan-300 border-cyan-400/30",
   "قيد التجهيز": "bg-sky-500/15 text-sky-300 border-sky-400/30",
   "تم الشحن": "bg-violet-500/15 text-violet-300 border-violet-400/30",
   "تم التوصيل": "bg-emerald-500/15 text-emerald-300 border-emerald-400/30",
+  "قيد الانتظار": "bg-amber-500/15 text-amber-300 border-amber-400/30",
 };
 
 export const OrderTracking: React.FC = () => {
@@ -67,9 +77,9 @@ export const OrderTracking: React.FC = () => {
 
     try {
         const matches = await OrderService.fetchOrdersByPhoneOrCode(value);
-        // Remove personal/sensitive fields before storing results
         const sanitized = matches.map((o) => ({
           ...o,
+          status: normalizeOrderStatus(o.status),
           customerName: "",
           phone: "",
           address: "",
@@ -109,9 +119,8 @@ export const OrderTracking: React.FC = () => {
             const updated = {
               ...existing,
               items: deduped,
-              // if incoming createdAt is newer, prefer its timestamps and status
               ...(new Date(o.createdAt).getTime() > new Date(existing.createdAt).getTime()
-                ? { createdAt: o.createdAt, status: o.status }
+                ? { createdAt: o.createdAt, status: normalizeOrderStatus(o.status) }
                 : {}),
             } as Order;
 
@@ -251,7 +260,8 @@ export const OrderTracking: React.FC = () => {
           )}
 
           {orders.map((order, orderIndex) => {
-            const currentStepIdx = STEP_INDEX_MAP[order.status] ?? 0;
+            const normalizedStatus = normalizeOrderStatus(order.status);
+            const currentStepIdx = STEP_INDEX_MAP[normalizedStatus] ?? 0;
 
             return (
               <article
@@ -267,11 +277,11 @@ export const OrderTracking: React.FC = () => {
                     </div>
                     <span
                       className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-xs font-semibold ${
-                        statusBadgeStyles[order.status] ?? statusBadgeStyles["قيد الانتظار"]
+                        statusBadgeStyles[normalizedStatus] ?? statusBadgeStyles["جاري التأكيد"]
                       }`}
                     >
                       <span className="h-2 w-2 rounded-full bg-current" />
-                      {order.status || "قيد الانتظار"}
+                      {normalizedStatus || "جاري التأكيد"}
                     </span>
                   </div>
                 </div>
@@ -281,7 +291,7 @@ export const OrderTracking: React.FC = () => {
                   <h4 className="mb-6 text-xs font-bold uppercase tracking-[0.25em] text-[#d8b56a]">
                     مراحل متابعة الشحنة
                   </h4>
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
                     {ORDER_STEPS.map((step, idx) => {
                       const isCompleted = idx < currentStepIdx;
                       const isCurrent = idx === currentStepIdx;

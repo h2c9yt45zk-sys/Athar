@@ -16,7 +16,7 @@ create table if not exists public.orders (
   address text,
   notes text,
   total numeric(12,2) not null default 0,
-  status text not null default 'قيد الانتظار',
+  status text not null default 'جاري التأكيد',
   created_at timestamptz not null default now(),
   delivered_at timestamptz,
   items jsonb not null default '[]'::jsonb,

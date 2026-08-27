@@ -1,7 +1,7 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
-import { EGYPTIAN_GOVERNORATES, Product, CategoryInfo, PaymentStatus, Order } from '../types';
+import { EGYPTIAN_GOVERNORATES, Product, CategoryInfo, PaymentStatus, Order, OrderStatus, normalizeOrderStatus } from '../types';
 import { AdminAuthService } from '../services/adminAuthService';
 import { ProductService, DEFAULT_PRODUCT_IMAGE } from '../services/productService';
 import { OrderService } from '../services/orderService';
@@ -20,8 +20,6 @@ import {
   Store,
   X,
 } from 'lucide-react';
-
-type OrderStatus = 'قيد الانتظار' | 'قيد التجهيز' | 'تم الشحن' | 'تم التوصيل';
 
 type OrderItem = {
   name: string;
@@ -68,10 +66,12 @@ const sidebarItems: Array<{ key: 'orders' | 'store'; label: string; icon: typeof
 ];
 
 const statusClasses: Record<OrderStatus, string> = {
-  'قيد الانتظار': 'bg-amber-500/15 text-amber-200 border-amber-400/30',
+  'جاري التأكيد': 'bg-amber-500/15 text-amber-200 border-amber-400/30',
+  'تم التأكيد': 'bg-cyan-500/15 text-cyan-200 border-cyan-400/30',
   'قيد التجهيز': 'bg-sky-500/15 text-sky-200 border-sky-400/30',
   'تم الشحن': 'bg-violet-500/15 text-violet-200 border-violet-400/30',
   'تم التوصيل': 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30',
+  'قيد الانتظار': 'bg-amber-500/15 text-amber-200 border-amber-400/30',
 };
 
 const paymentStatusClasses: Record<PaymentStatus, string> = {
@@ -82,9 +82,11 @@ const paymentStatusClasses: Record<PaymentStatus, string> = {
 
 const orderStatusTabs: Array<{ label: string; value: 'الكل' | OrderStatus }> = [
   { label: 'الكل', value: 'الكل' },
-  { label: 'المعلقة', value: 'قيد الانتظار' },
-  { label: 'جاري التجهيز', value: 'قيد التجهيز' },
+  { label: 'جاري التأكيد', value: 'جاري التأكيد' },
+  { label: 'تم التأكيد', value: 'تم التأكيد' },
+  { label: 'قيد التجهيز', value: 'قيد التجهيز' },
   { label: 'تم الشحن', value: 'تم الشحن' },
+  { label: 'تم التوصيل', value: 'تم التوصيل' },
 ];
 
 const paymentStatusTabs: PaymentStatus[] = ['جاري الفحص', 'تم القبول', 'خطأ في الدفع'];
@@ -301,20 +303,21 @@ export default function AdminDashboard() {
   };
 
   const updateOrderStatus = (orderId: string, status: OrderStatus) => {
+    const normalizedStatus = normalizeOrderStatus(status);
     setOrders((prev) =>
       prev.map((order) => {
         if (order.id !== orderId) {
           return order;
         }
 
-        if (status === 'تم التوصيل') {
-          return { ...order, status, deliveredAt: order.deliveredAt ?? new Date().toISOString() };
+        if (normalizedStatus === 'تم التوصيل') {
+          return { ...order, status: normalizedStatus, deliveredAt: order.deliveredAt ?? new Date().toISOString() };
         }
 
-        return { ...order, status, deliveredAt: undefined };
+        return { ...order, status: normalizedStatus, deliveredAt: undefined };
       })
     );
-    OrderService.updateOrderStatus(orderId, status).catch((err) => {
+    OrderService.updateOrderStatus(orderId, normalizedStatus).catch((err) => {
       console.warn('Failed to persist status change to Supabase:', err);
     });
   };
@@ -348,9 +351,10 @@ export default function AdminDashboard() {
     setDeliveryConfirmOrderId(null);
   };
 
-  const restoreOrder = (orderId: string, status: 'قيد الانتظار' | 'قيد التجهيز' | 'تم الشحن') => {
-    setOrders((prev) => prev.map((order) => (order.id === orderId ? { ...order, status } : order)));
-    OrderService.updateOrderStatus(orderId, status).catch((err) => {
+  const restoreOrder = (orderId: string, status: OrderStatus) => {
+    const normalizedStatus = normalizeOrderStatus(status);
+    setOrders((prev) => prev.map((order) => (order.id === orderId ? { ...order, status: normalizedStatus } : order)));
+    OrderService.updateOrderStatus(orderId, normalizedStatus).catch((err) => {
       console.warn('Failed to persist restored status to Supabase:', err);
     });
   };
@@ -936,7 +940,7 @@ export default function AdminDashboard() {
                       <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                         <p className="text-sm text-[#f2e1d0]">تغيير حالة الطلب</p>
                         <div className="mt-3 flex flex-wrap gap-2">
-                          {(['قيد الانتظار', 'قيد التجهيز', 'تم الشحن', 'تم التوصيل'] as OrderStatus[]).map((status) => (
+                          {(['جاري التأكيد', 'تم التأكيد', 'قيد التجهيز', 'تم الشحن', 'تم التوصيل'] as OrderStatus[]).map((status) => (
                             <button
                               key={status}
                               className={`rounded-full border px-3 py-2 text-sm transition ${selectedOrder.status === status ? 'border-[#c8914f] bg-[#c8914f]/15 text-[#f3ce90]' : 'border-white/10 text-[#f2e1d0] hover:bg-white/5'}`}

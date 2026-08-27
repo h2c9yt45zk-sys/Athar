@@ -1,5 +1,5 @@
 import { supabase } from '../lib/supabase';
-import type { Order, OrderItem, PaymentMethod, PaymentStatus } from '../types';
+import { normalizeOrderStatus, type Order, type OrderItem, type PaymentMethod, type PaymentStatus } from '../types';
 
 const normalizePhone = (value: string): string => value.replace(/[^0-9]/g, '');
 
@@ -11,21 +11,7 @@ const normalizeCode = (value: string): string =>
     .trim()
     .toUpperCase();
 
-const CODE_CHARS = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
-
 export const OrderService = {
-  generateOrderCode(existingOrders: Order[] = []): string {
-    let randomPart = '';
-    for (let i = 0; i < 4; i++) {
-      randomPart += CODE_CHARS.charAt(Math.floor(Math.random() * CODE_CHARS.length));
-    }
-    const candidate = `ATHAR-${randomPart}`;
-    const isTaken = existingOrders.some(
-      (order) => order.orderCode && normalizeCode(order.orderCode) === candidate
-    );
-    return isTaken ? this.generateOrderCode(existingOrders) : candidate;
-  },
-
   async saveOrder(order: Order, items: OrderItem[]): Promise<Order> {
     const formattedItems = items.map((item) => ({
       productId: item.productId || undefined,
@@ -43,8 +29,7 @@ export const OrderService = {
       address: order.address,
       notes: order.notes ? order.notes.trim() : null,
       total_amount: Number(order.total ?? 0),
-      status: order.status || 'قيد الانتظار',
-      tracking_id: order.orderCode,
+      status: normalizeOrderStatus(order.status),
     };
 
     // 1. Insert parent order and retrieve generated row
@@ -91,14 +76,14 @@ export const OrderService = {
     return {
       ...order,
       id: String(createdOrderId),
-      orderCode: String(savedOrder.tracking_id || order.orderCode),
+      orderCode: String(savedOrder.id ?? order.orderCode ?? ''),
       customerName: String(savedOrder.full_name || order.customerName),
       phone: String(savedOrder.phone || order.phone),
       governorate: savedOrder.governorate ? String(savedOrder.governorate) : order.governorate,
       address: String(savedOrder.address || order.address),
       notes: savedOrder.notes ? String(savedOrder.notes) : order.notes,
       total: Number(savedOrder.total_amount ?? order.total),
-      status: (savedOrder.status as Order['status']) || order.status,
+      status: normalizeOrderStatus(savedOrder.status as string | null),
       createdAt: String(savedOrder.created_at || order.createdAt),
       items: formattedItems,
     };
@@ -171,14 +156,14 @@ export const OrderService = {
 
         return {
           id: rowId,
-          orderCode: String(row.tracking_id ?? row.order_code ?? row.id ?? ''),
+          orderCode: String(row.id ?? ''),
           customerName: String(row.full_name ?? row.customer_name ?? ''),
           phone: String(row.phone ?? ''),
           governorate: row.governorate ? String(row.governorate) : undefined,
           address: String(row.address ?? ''),
           notes: row.notes ? String(row.notes) : '',
           total: Number(row.total_amount ?? row.total ?? 0),
-          status: (row.status as Order['status']) ?? 'قيد الانتظار',
+          status: normalizeOrderStatus(row.status as string | null),
           createdAt: String(row.created_at ?? new Date().toISOString()),
           items: embeddedItems,
           paymentMethod: ('الدفع عند الاستلام' as PaymentMethod),
@@ -253,14 +238,14 @@ export const OrderService = {
 
         return {
           id: rowId,
-          orderCode: String(row.tracking_id ?? row.order_code ?? row.id ?? ''),
+          orderCode: String(row.id ?? ''),
           customerName: String(row.full_name ?? row.customer_name ?? ''),
           phone: String(row.phone ?? ''),
           governorate: row.governorate ? String(row.governorate) : undefined,
           address: String(row.address ?? ''),
           notes: row.notes ? String(row.notes) : '',
           total: Number(row.total_amount ?? row.total ?? 0),
-          status: (row.status as Order['status']) ?? 'قيد الانتظار',
+          status: normalizeOrderStatus(row.status as string | null),
           createdAt: String(row.created_at ?? new Date().toISOString()),
           items: embeddedItems,
           paymentMethod: 'الدفع عند الاستلام',

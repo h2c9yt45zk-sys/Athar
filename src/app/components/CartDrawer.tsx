@@ -14,9 +14,12 @@ export const CartDrawer: React.FC = () => {
     cartSubtotal,
     addOrder,
   } = useCart();
+  const STORE_WHATSAPP_NUMBER = '201156769214';
   const [stage, setStage] = useState<'cart' | 'checkout' | 'success'>('cart');
   const [orderId, setOrderId] = useState<string | null>(null);
+  const [orderCode, setOrderCode] = useState<string | null>(null);
   const [orderPhone, setOrderPhone] = useState<string | null>(null);
+  const [isWhatsAppConfirmed, setIsWhatsAppConfirmed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string>('');
   const [checkoutInitialValues, setCheckoutInitialValues] = useState<CustomerOrderPayload>({
@@ -42,7 +45,9 @@ export const CartDrawer: React.FC = () => {
     if (!isCartOpen) {
       setStage('cart');
       setOrderId(null);
+      setOrderCode(null);
       setOrderPhone(null);
+      setIsWhatsAppConfirmed(false);
       setIsSubmitting(false);
       setCheckoutError('');
     }
@@ -68,6 +73,7 @@ export const CartDrawer: React.FC = () => {
     try {
       const newOrder = await addOrder(customer, cart, cartSubtotal);
       setOrderId(newOrder.id);
+      setOrderCode(newOrder.orderCode || null);
       setOrderPhone(newOrder.phone || customer.phone || null);
       setStage('success');
     } catch (error: any) {
@@ -95,6 +101,16 @@ export const CartDrawer: React.FC = () => {
 
   const handleBackToCart = () => {
     setStage('cart');
+  };
+
+  const handleWhatsAppConfirmation = () => {
+    const orderReference = orderCode || orderId || 'طلب جديد';
+    const customerName = checkoutInitialValues.fullName || 'العميل';
+    const phone = orderPhone || checkoutInitialValues.phone || 'غير محدد';
+    const message = `أهلًا، أود تأكيد طلبي في متجر أثر.\nالاسم: ${customerName}\nالهاتف: ${phone}\nرقم الطلب: ${orderReference}\nالمبلغ: ${cartSubtotal.toLocaleString()} ر.س\nأرغب بتأكيد الطلب ومراجعة البيانات قبل الشحن.`;
+    const whatsappUrl = `https://wa.me/${STORE_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+    setIsWhatsAppConfirmed(true);
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -186,27 +202,50 @@ export const CartDrawer: React.FC = () => {
           {stage === 'success' && (
             <div className="space-y-4">
               <div className="flex min-h-[360px] flex-col items-center justify-center gap-6 rounded-[28px] border border-[#d8b56a]/30 bg-[#220912]/95 p-6 text-center shadow-[0_30px_90px_rgba(0,0,0,0.55)]">
-                <span className="material-symbols-outlined text-7xl text-[#d8b56a]">check_circle</span>
+                <span className="material-symbols-outlined text-7xl text-[#d8b56a]">
+                  {isWhatsAppConfirmed ? 'check_circle' : 'warning'}
+                </span>
                 <div className="space-y-2">
-                  <h3 className="text-2xl font-bold text-white">تم استلام طلبك بنجاح</h3>
-                  <p className="text-sm leading-6 text-[#e7dcc8]">شكراً لتسوقك من أثر. تم تأكيد طلبك وجارٍ تجهيزه بعناية.</p>
+                  <h3 className="text-2xl font-bold text-white">
+                    {isWhatsAppConfirmed ? 'تم استلام طلبك' : 'برجاء تأكيد طلبك عبر واتساب لإتمام تنفيذه'}
+                  </h3>
+                  <p className="text-sm leading-6 text-[#e7dcc8]">
+                    {isWhatsAppConfirmed
+                      ? 'تم استلام طلبك بنجاح، ويمكنك الآن متابعة الطلب.'
+                      : 'يجب تأكيد طلبك عبر واتساب أولاً ليتم متابعة الطلب وتأكيده من قبل الإدارة.'}
+                  </p>
                 </div>
 
-                <div className="flex w-full flex-col gap-3 sm:flex-row">
+                <div className="flex w-full flex-col gap-3">
                   <button
                     type="button"
-                    onClick={handleTrackOrder}
-                    className="flex-1 rounded-full bg-[#D4AF37] px-6 py-3 text-sm font-semibold text-[#4A0E17] transition hover:bg-[#c49e2f] shadow-md"
+                    onClick={handleWhatsAppConfirmation}
+                    className="w-full rounded-full bg-[#25D366] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#1fbf5b] shadow-md"
                   >
-                    تتبع طلبك الآن
+                    {isWhatsAppConfirmed ? 'إعادة إرسال تأكيد WhatsApp' : 'تأكيد الطلب عبر WhatsApp'}
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleReturnHome}
-                    className="flex-1 rounded-full border border-white/20 bg-white/5 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-                  >
-                    العودة للرئيسية
-                  </button>
+
+                  <div className="flex w-full flex-col gap-3 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={handleTrackOrder}
+                      disabled={!isWhatsAppConfirmed}
+                      className={`flex-1 rounded-full px-6 py-3 text-sm font-semibold text-[#4A0E17] transition shadow-md ${
+                        isWhatsAppConfirmed
+                          ? 'bg-[#D4AF37] hover:bg-[#c49e2f]'
+                          : 'cursor-not-allowed bg-[#D4AF37]/40 text-[#4A0E17]/60'
+                      }`}
+                    >
+                      تتبع طلبك الآن
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleReturnHome}
+                      className="flex-1 rounded-full border border-white/20 bg-white/5 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                    >
+                      العودة للرئيسية
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

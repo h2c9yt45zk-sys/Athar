@@ -72,7 +72,40 @@ export interface CustomerOrderPayload {
   notes?: string;
 }
 
-export type OrderStatus = 'قيد الانتظار' | 'قيد التجهيز' | 'تم الشحن' | 'تم التوصيل';
+export type OrderStatus =
+  | 'جاري التأكيد'
+  | 'تم التأكيد'
+  | 'قيد التجهيز'
+  | 'تم الشحن'
+  | 'تم التوصيل'
+  | 'قيد الانتظار';
+
+export const ORDER_STATUS_SEQUENCE: OrderStatus[] = [
+  'جاري التأكيد',
+  'تم التأكيد',
+  'قيد التجهيز',
+  'تم الشحن',
+  'تم التوصيل',
+];
+
+export const normalizeOrderStatus = (status?: string | null): OrderStatus => {
+  switch (status) {
+    case 'قيد الانتظار':
+    case 'جاري التأكيد':
+      return 'جاري التأكيد';
+    case 'تم التأكيد':
+      return 'تم التأكيد';
+    case 'قيد التجهيز':
+      return 'قيد التجهيز';
+    case 'تم الشحن':
+      return 'تم الشحن';
+    case 'تم التوصيل':
+      return 'تم التوصيل';
+    default:
+      return 'جاري التأكيد';
+  }
+};
+
 export type PaymentMethod = 'الدفع عند الاستلام' | 'دفع إلكتروني';
 export type ElectronicPaymentMethod = 'إنستا باي' | 'فودافون كاش';
 export type PaymentStatus = 'جاري الفحص' | 'تم القبول' | 'خطأ في الدفع';

@@ -14,14 +14,13 @@ create extension if not exists "uuid-ossp";
 -- 2. Create or recreate public.orders table
 create table if not exists public.orders (
   id uuid primary key default gen_random_uuid(),
-  tracking_id text not null unique,
   full_name text not null,
   phone text not null,
   governorate text,
   address text not null,
   notes text,
   total_amount numeric(12, 2) not null default 0,
-  status text not null default 'قيد الانتظار',
+  status text not null default 'جاري التأكيد',
   user_id uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -29,30 +28,16 @@ create table if not exists public.orders (
 
 -- Ensure all expected columns exist if the table was already partially created
 alter table public.orders
-  add column if not exists tracking_id text,
   add column if not exists full_name text,
   add column if not exists phone text,
   add column if not exists governorate text,
   add column if not exists address text,
   add column if not exists notes text,
   add column if not exists total_amount numeric(12, 2) default 0,
-  add column if not exists status text default 'قيد الانتظار',
+  add column if not exists status text default 'جاري التأكيد',
   add column if not exists user_id uuid references auth.users(id) on delete set null,
   add column if not exists created_at timestamptz default now(),
   add column if not exists updated_at timestamptz default now();
-
--- Ensure tracking_id has a unique constraint
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint
-    where conname = 'orders_tracking_id_unique' and conrelid = 'public.orders'::regclass
-  ) then
-    alter table public.orders add constraint orders_tracking_id_unique unique (tracking_id);
-  end if;
-exception
-  when others then null;
-end $$;
 
 -- 3. Create or recreate public.order_items table
 create table if not exists public.order_items (
@@ -78,7 +63,6 @@ alter table public.order_items
 
 -- 4. Create performance indexes for guest lookups and dashboard sorting
 create index if not exists idx_orders_phone on public.orders(phone);
-create index if not exists idx_orders_tracking_id on public.orders(tracking_id);
 create index if not exists idx_orders_created_at on public.orders(created_at desc);
 create index if not exists idx_order_items_order_id on public.order_items(order_id);
 
@@ -122,7 +106,7 @@ create policy "Allow guest insert on order_items"
   to anon, authenticated
   with check (true);
 
--- Policy 3: Anyone can lookup orders by tracking ID or phone number
+-- Policy 3: Anyone can lookup orders by phone number
 create policy "Allow public select on orders"
   on public.orders for select
   to anon, authenticated

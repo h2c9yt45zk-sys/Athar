@@ -204,7 +204,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       address: customer.address,
       notes: customer.notes,
       total,
-      status: 'قيد الانتظار',
+      status: 'جاري التأكيد',
       createdAt: new Date().toISOString(),
       deliveredAt: undefined,
       items: orderItems,

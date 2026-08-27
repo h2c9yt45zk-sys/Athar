@@ -11,9 +11,14 @@ export const Footer: React.FC = () => {
             <img src={logoUrl} alt="ATHAR logo" className="h-full w-full object-cover" />
           </div>
           <div className="flex flex-col items-center gap-3 md:flex-row">
-            <button className="bg-[#4A0E17] text-white px-8 py-3 rounded-full font-label-md uppercase tracking-widest hover:bg-[#3d0b15] transition-colors duration-300 flex items-center gap-2">
+            <a
+              href="https://wa.me/201156769214"
+              target="_blank"
+              rel="noreferrer"
+              className="bg-[#4A0E17] text-white px-8 py-3 rounded-full font-label-md uppercase tracking-widest hover:bg-[#3d0b15] transition-colors duration-300 flex items-center gap-2"
+            >
               <span className="material-symbols-outlined">call</span>اتصل بنا
-            </button>
+            </a>
           </div>
         </div>
       </div>
