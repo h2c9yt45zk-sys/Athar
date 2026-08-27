@@ -38,7 +38,7 @@ const normalizeProduct = (row: any): Product => {
     oldPrice: row?.old_price ?? row?.oldPrice ?? undefined,
     image: String(row?.image ?? ''),
     tag: row?.tag ?? undefined,
-    isBestSeller: Boolean(row?.is_best_seller ?? row?.isBestSeller ?? false),
+    isBestSeller: row?.is_best_seller === true,
     category: normalizeCategory(String(row?.category ?? 'women')),
     description: row?.description ?? '',
     sizes: sizes.filter(Boolean).map(String),

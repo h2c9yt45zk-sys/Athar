@@ -104,9 +104,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
           OrderService.fetchAllOrders(),
         ]);
         if (isActive) {
-          if (fetchedProducts.length > 0) {
-            setProducts(fetchedProducts);
-          }
+          // Always replace from Supabase so localStorage cache never overrides the DB truth
+          setProducts(fetchedProducts);
           if (fetchedOrders.length > 0) {
             setOrders(fetchedOrders);
           }
