@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { EGYPTIAN_GOVERNORATES } from '../types';
 import type { CustomerOrderPayload } from '../types';
+import { useAuth } from '../contexts/AuthContext';
 
 export { EGYPTIAN_GOVERNORATES };
 
@@ -25,25 +26,26 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({
   initialValues,
   errorMessage,
 }) => {
+  const { user } = useAuth();
   const [formValues, setFormValues] = useState<CheckoutFormValues>({
-    fullName: '',
-    phone: '',
-    governorate: '',
-    address: '',
-    notes: '',
+    fullName: initialValues?.fullName || user?.fullName || '',
+    phone: initialValues?.phone || user?.phone || '',
+    governorate: initialValues?.governorate || user?.governorate || '',
+    address: initialValues?.address || user?.address || '',
+    notes: initialValues?.notes || '',
   });
   const [errors, setErrors] = useState<Partial<Record<keyof CheckoutFormValues, string>>>({});
 
   useEffect(() => {
     setFormValues((prev) => ({
       ...prev,
-      fullName: initialValues?.fullName ?? prev.fullName,
-      phone: initialValues?.phone ?? prev.phone,
-      governorate: initialValues?.governorate ?? prev.governorate,
-      address: initialValues?.address ?? prev.address,
+      fullName: initialValues?.fullName ?? user?.fullName ?? prev.fullName,
+      phone: initialValues?.phone ?? user?.phone ?? prev.phone,
+      governorate: initialValues?.governorate ?? user?.governorate ?? prev.governorate,
+      address: initialValues?.address ?? user?.address ?? prev.address,
       notes: initialValues?.notes ?? prev.notes,
     }));
-  }, [initialValues]);
+  }, [initialValues, user]);
 
   const handleChange = (field: keyof CheckoutFormValues, value: string) => {
     setFormValues((prev) => ({ ...prev, [field]: value }));
@@ -86,6 +88,13 @@ export const CheckoutForm: React.FC<CheckoutFormProps> = ({
             {itemCount} منتج • {subtotal.toLocaleString()} ج.م
           </div>
         </div>
+
+        {user && (
+          <div className="mb-4 flex items-center gap-2 rounded-2xl border border-[#D4AF37]/20 bg-[#220912] p-3 text-xs text-[#f4dfc9]">
+            <span className="material-symbols-outlined text-[#D4AF37] text-base !scale-x-100">check_circle</span>
+            <span>تم ملء البيانات تلقائيًا من حسابك (يمكنك تعديل أي حقل لهذا الطلب)</span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2 text-right">

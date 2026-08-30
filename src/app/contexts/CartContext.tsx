@@ -16,7 +16,7 @@ interface CartContextType {
   cartSubtotal: number;
   cartCount: number;
   clearCart: () => void;
-  addOrder: (customer: CustomerOrderPayload, items: CartItem[], total: number) => Promise<Order>;
+  addOrder: (customer: CustomerOrderPayload, items: CartItem[], total: number, userId?: string) => Promise<Order>;
   orders: Order[];
   setOrders: React.Dispatch<React.SetStateAction<Order[]>>;
   products: Product[];
@@ -186,7 +186,12 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearCart = () => setCart([]);
 
-  const addOrder = async (customer: CustomerOrderPayload, items: CartItem[], total: number): Promise<Order> => {
+  const addOrder = async (
+    customer: CustomerOrderPayload,
+    items: CartItem[],
+    total: number,
+    userId?: string
+  ): Promise<Order> => {
     const orderItems: OrderItem[] = items.map((item) => ({
       productId: item.productId ? String(item.productId) : undefined,
       name: item.name,
@@ -207,6 +212,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       status: 'جاري التأكيد',
       createdAt: new Date().toISOString(),
       deliveredAt: undefined,
+      userId: userId || undefined,
       items: orderItems,
       paymentMethod: 'الدفع عند الاستلام',
       paymentStatus: 'جاري الفحص',
@@ -220,6 +226,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return savedOrder;
   };
+
 
   const cartSubtotal = cart.reduce((sum, item) => sum + item.price * (item.quantity || 1), 0);
   const cartCount = cart.reduce((sum, item) => sum + (item.quantity || 1), 0);

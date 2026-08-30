@@ -21,7 +21,7 @@ create table if not exists public.orders (
   notes text,
   total_amount numeric(12, 2) not null default 0,
   status text not null default 'جاري التأكيد',
-  user_id uuid references auth.users(id) on delete set null,
+  user_id uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -35,7 +35,7 @@ alter table public.orders
   add column if not exists notes text,
   add column if not exists total_amount numeric(12, 2) default 0,
   add column if not exists status text default 'جاري التأكيد',
-  add column if not exists user_id uuid references auth.users(id) on delete set null,
+  add column if not exists user_id uuid references public.profiles(id) on delete set null,
   add column if not exists created_at timestamptz default now(),
   add column if not exists updated_at timestamptz default now();
 

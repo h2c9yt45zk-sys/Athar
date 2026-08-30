@@ -22,7 +22,7 @@ export const OrderService = {
     }));
 
     // Exact database payload matching orders table schema
-    const orderPayload = {
+    const orderPayload: any = {
       full_name: order.customerName,
       phone: normalizePhone(order.phone),
       governorate: order.governorate || null,
@@ -31,6 +31,11 @@ export const OrderService = {
       total_amount: Number(order.total ?? 0),
       status: normalizeOrderStatus(order.status),
     };
+
+    // If the frontend supplied a logged-in user's ID, persist it for account-based tracking
+    if (order.userId) {
+      orderPayload.user_id = String(order.userId);
+    }
 
     // 1. Insert parent order and retrieve generated row
     const { data: savedOrder, error: orderError } = await supabase
@@ -85,37 +90,43 @@ export const OrderService = {
       total: Number(savedOrder.total_amount ?? order.total),
       status: normalizeOrderStatus(savedOrder.status as string | null),
       createdAt: String(savedOrder.created_at || order.createdAt),
+      userId: savedOrder.user_id ? String(savedOrder.user_id) : order.userId,
       items: formattedItems,
     };
   },
 
-  async fetchOrdersByPhoneOrCode(searchValue: string): Promise<Order[]> {
-    const raw = searchValue.trim();
-    if (!raw) return [];
+  async fetchUserOrders(userPhone: string, userId?: string, searchQuery?: string): Promise<Order[]> {
+    const cleanUserPhone = normalizePhone(String(userPhone || '') || '');
 
-    const phoneQuery = normalizePhone(raw);
-
-    if (!phoneQuery) return [];
-
+    // If a userId is supplied, enforce fetch by `user_id` to guarantee privacy
     try {
-      // Exact match for full phone numbers (recommended). If input is short, fall back to ilike.
-      let query = supabase.from('orders').select('*, order_items(*)').order('created_at', { ascending: false });
+      let query: any = supabase.from('orders').select('*, order_items(*)').order('created_at', { ascending: false });
 
-      if (phoneQuery.length >= 7) {
-        query = query.eq('phone', phoneQuery);
+      if (userId) {
+        query = query.eq('user_id', String(userId));
+      } else if (cleanUserPhone) {
+        query = query.eq('phone', cleanUserPhone);
       } else {
-        query = query.ilike('phone', `%${phoneQuery}%`);
+        return [];
+      }
+
+      const cleanSearch = (searchQuery || '').trim();
+      // If user typed a specific order ID or code, filter for that order id
+      if (cleanSearch) {
+        // Only apply additional search when it doesn't equal the phone (avoid accidental collisions)
+        if (cleanSearch !== cleanUserPhone) {
+          query = query.or(`id.eq.${cleanSearch},id.ilike.%${cleanSearch}%`);
+        }
       }
 
       const { data, error } = await query;
       if (error) {
-        console.warn('Supabase orders lookup failed:', error.message);
+        console.warn('Supabase fetchUserOrders error:', error.message);
         return [];
       }
 
       if (!Array.isArray(data)) return [];
 
-      // Map DB rows to Order objects including embedded order_items when present
       const orderIds = data.map((row: any) => row.id).filter(Boolean);
       let itemMap: Record<string, OrderItem[]> = {};
 
@@ -131,6 +142,7 @@ export const OrderService = {
               const oid = String(it.order_id);
               if (!itemMap[oid]) itemMap[oid] = [];
               itemMap[oid].push({
+                productId: it.product_id ? String(it.product_id) : undefined,
                 name: String(it.product_name ?? it.name ?? ''),
                 size: String(it.size ?? 'M'),
                 quantity: Number(it.quantity ?? 1),
@@ -138,26 +150,27 @@ export const OrderService = {
               });
             }
           }
-        } catch (err) {
+        } catch {
           // ignore
         }
       }
 
-      const dbOrders = data.map((row: any) => {
+      return data.map((row: any) => {
         const rowId = String(row.id ?? '');
         const embeddedItems = Array.isArray(row.order_items) && row.order_items.length > 0
           ? row.order_items.map((it: any) => ({
+              productId: it.product_id ? String(it.product_id) : undefined,
               name: String(it.product_name ?? it.name ?? ''),
               size: String(it.size ?? 'M'),
               quantity: Number(it.quantity ?? 1),
               price: Number(it.price ?? 0),
             }))
-          : (itemMap[rowId] ?? (Array.isArray(row.items) ? row.items : []));
+          : (itemMap[rowId] ?? []);
 
         return {
           id: rowId,
           orderCode: String(row.id ?? ''),
-          customerName: String(row.full_name ?? row.customer_name ?? ''),
+          customerName: String(row.full_name ?? ''),
           phone: String(row.phone ?? ''),
           governorate: row.governorate ? String(row.governorate) : undefined,
           address: String(row.address ?? ''),
@@ -170,10 +183,94 @@ export const OrderService = {
           paymentStatus: ('جاري الفحص' as PaymentStatus),
         };
       });
-
-      return dbOrders;
     } catch (error) {
-      console.warn('Supabase fetchOrdersByPhoneOrCode failed:', error);
+      console.warn('fetchUserOrders failed:', error);
+      return [];
+    }
+  },
+
+  async fetchOrdersByPhoneOrCode(searchValue: string, authenticatedPhone?: string): Promise<Order[]> {
+    const raw = searchValue.trim();
+    if (!raw) return [];
+
+    // If authenticatedPhone is supplied, enforce that only orders belonging to authenticatedPhone can be fetched
+    if (authenticatedPhone) {
+      return this.fetchUserOrders(authenticatedPhone, raw);
+    }
+
+    const phoneQuery = normalizePhone(raw);
+    if (!phoneQuery) return [];
+
+    try {
+      let query = supabase.from('orders').select('*, order_items(*)').order('created_at', { ascending: false });
+
+      if (phoneQuery.length >= 7) {
+        query = query.eq('phone', phoneQuery);
+      } else {
+        query = query.ilike('phone', `%${phoneQuery}%`);
+      }
+
+      const { data, error } = await query;
+      if (error || !Array.isArray(data)) return [];
+
+      const orderIds = data.map((row: any) => row.id).filter(Boolean);
+      let itemMap: Record<string, OrderItem[]> = {};
+
+      if (orderIds.length > 0 && !data[0]?.order_items) {
+        try {
+          const { data: fetchedItems } = await supabase
+            .from('order_items')
+            .select('*')
+            .in('order_id', orderIds);
+
+          if (Array.isArray(fetchedItems)) {
+            for (const it of fetchedItems) {
+              const oid = String(it.order_id);
+              if (!itemMap[oid]) itemMap[oid] = [];
+              itemMap[oid].push({
+                productId: it.product_id ? String(it.product_id) : undefined,
+                name: String(it.product_name ?? it.name ?? ''),
+                size: String(it.size ?? 'M'),
+                quantity: Number(it.quantity ?? 1),
+                price: Number(it.price ?? 0),
+              });
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      return data.map((row: any) => {
+        const rowId = String(row.id ?? '');
+        const embeddedItems = Array.isArray(row.order_items) && row.order_items.length > 0
+          ? row.order_items.map((it: any) => ({
+              productId: it.product_id ? String(it.product_id) : undefined,
+              name: String(it.product_name ?? it.name ?? ''),
+              size: String(it.size ?? 'M'),
+              quantity: Number(it.quantity ?? 1),
+              price: Number(it.price ?? 0),
+            }))
+          : (itemMap[rowId] ?? []);
+
+        return {
+          id: rowId,
+          orderCode: String(row.id ?? ''),
+          customerName: String(row.full_name ?? ''),
+          phone: String(row.phone ?? ''),
+          governorate: row.governorate ? String(row.governorate) : undefined,
+          address: String(row.address ?? ''),
+          notes: row.notes ? String(row.notes) : '',
+          total: Number(row.total_amount ?? row.total ?? 0),
+          status: normalizeOrderStatus(row.status as string | null),
+          createdAt: String(row.created_at ?? new Date().toISOString()),
+          items: embeddedItems,
+          paymentMethod: ('الدفع عند الاستلام' as PaymentMethod),
+          paymentStatus: ('جاري الفحص' as PaymentStatus),
+        };
+      });
+    } catch (error) {
+      console.warn('fetchOrdersByPhoneOrCode failed:', error);
       return [];
     }
   },

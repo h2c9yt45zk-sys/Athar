@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
+import { useAuth } from '../contexts/AuthContext';
 import { CheckoutForm } from './CheckoutForm';
 import type { CustomerOrderPayload } from '../types';
 
@@ -14,12 +15,12 @@ export const CartDrawer: React.FC = () => {
     cartSubtotal,
     addOrder,
   } = useCart();
-  const STORE_WHATSAPP_NUMBER = '201156769214';
+  const { user } = useAuth();
+
   const [stage, setStage] = useState<'cart' | 'checkout' | 'success'>('cart');
   const [orderId, setOrderId] = useState<string | null>(null);
   const [orderCode, setOrderCode] = useState<string | null>(null);
   const [orderPhone, setOrderPhone] = useState<string | null>(null);
-  const [isWhatsAppConfirmed, setIsWhatsAppConfirmed] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string>('');
   const [checkoutInitialValues, setCheckoutInitialValues] = useState<CustomerOrderPayload>({
@@ -47,7 +48,6 @@ export const CartDrawer: React.FC = () => {
       setOrderId(null);
       setOrderCode(null);
       setOrderPhone(null);
-      setIsWhatsAppConfirmed(false);
       setIsSubmitting(false);
       setCheckoutError('');
     }
@@ -55,10 +55,10 @@ export const CartDrawer: React.FC = () => {
 
   const handleStartCheckout = () => {
     setCheckoutInitialValues({
-      fullName: '',
-      phone: '',
-      governorate: '',
-      address: '',
+      fullName: user?.fullName || '',
+      phone: user?.phone || '',
+      governorate: user?.governorate || '',
+      address: user?.address || '',
       notes: '',
     });
     setCheckoutError('');
@@ -71,9 +71,9 @@ export const CartDrawer: React.FC = () => {
     setCheckoutInitialValues(customer);
 
     try {
-      const newOrder = await addOrder(customer, cart, cartSubtotal);
+      const newOrder = await addOrder(customer, cart, cartSubtotal, user?.id);
       setOrderId(newOrder.id);
-      setOrderCode(newOrder.orderCode || null);
+      setOrderCode(newOrder.orderCode || newOrder.id || null);
       setOrderPhone(newOrder.phone || customer.phone || null);
       setStage('success');
     } catch (error: any) {
@@ -103,16 +103,6 @@ export const CartDrawer: React.FC = () => {
     setStage('cart');
   };
 
-  const handleWhatsAppConfirmation = () => {
-    const orderReference = orderCode || orderId || 'طلب جديد';
-    const customerName = checkoutInitialValues.fullName || 'العميل';
-    const phone = orderPhone || checkoutInitialValues.phone || 'غير محدد';
-    const message = `أهلًا، أود تأكيد طلبي في متجر أثر.\nالاسم: ${customerName}\nالهاتف: ${phone}\nرقم الطلب: ${orderReference}\nالمبلغ: ${cartSubtotal.toLocaleString()} ر.س\nأرغب بتأكيد الطلب ومراجعة البيانات قبل الشحن.`;
-    const whatsappUrl = `https://wa.me/${STORE_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
-    setIsWhatsAppConfirmed(true);
-    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
-  };
-
   return (
     <>
       <div
@@ -123,12 +113,14 @@ export const CartDrawer: React.FC = () => {
       />
 
       <aside
-        className={`fixed top-0 right-0 h-full w-[80%] md:w-[34%] bg-[#1b0910] z-[70] transition-transform duration-500 ease-out shadow-[0_32px_120px_rgba(0,0,0,0.55)] flex flex-col ${
+        className={`fixed top-0 right-0 h-full w-[85%] sm:w-[75%] md:w-[38%] lg:w-[32%] bg-[#1b0910] z-[70] transition-transform duration-500 ease-out shadow-[0_32px_120px_rgba(0,0,0,0.55)] flex flex-col ${
           isCartOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
         <div className="p-6 border-b border-white/10 flex justify-between items-center bg-[#270913]">
-          <h2 className="font-headline-md text-[#f3e1c3]">{stage === 'checkout' ? 'إتمام الطلب' : stage === 'success' ? 'تم تأكيد الطلب' : 'حقيبة التسوق'}</h2>
+          <h2 className="font-headline-md text-[#f3e1c3]">
+            {stage === 'checkout' ? 'إتمام الطلب' : stage === 'success' ? 'تم تأكيد الطلب' : 'حقيبة التسوق'}
+          </h2>
           <button
             className="transition-colors text-[#f3e1c3] hover:text-[#d8b56a]"
             onClick={() => toggleCart(false)}
@@ -143,8 +135,8 @@ export const CartDrawer: React.FC = () => {
           {stage === 'cart' && (
             <>
               {cart.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-[#d8c9b6] gap-4">
-                  <span className="material-symbols-outlined text-5xl">shopping_bag</span>
+                <div className="flex flex-col items-center justify-center h-full text-[#d8c9b6] gap-4 py-16">
+                  <span className="material-symbols-outlined text-5xl text-[#D4AF37]/60 !scale-x-100">shopping_bag</span>
                   <p className="font-body-md">حقيبتك فارغة حالياً</p>
                 </div>
               ) : (
@@ -201,51 +193,42 @@ export const CartDrawer: React.FC = () => {
 
           {stage === 'success' && (
             <div className="space-y-4">
-              <div className="flex min-h-[360px] flex-col items-center justify-center gap-6 rounded-[28px] border border-[#d8b56a]/30 bg-[#220912]/95 p-6 text-center shadow-[0_30px_90px_rgba(0,0,0,0.55)]">
-                <span className="material-symbols-outlined text-7xl text-[#d8b56a]">
-                  {isWhatsAppConfirmed ? 'check_circle' : 'warning'}
-                </span>
+              <div className="flex min-h-[380px] flex-col items-center justify-center gap-5 rounded-[28px] border border-[#d8b56a]/30 bg-[#220912]/95 p-6 text-center shadow-[0_30px_90px_rgba(0,0,0,0.55)]">
+                <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <span className="material-symbols-outlined text-4xl !scale-x-100">check_circle</span>
+                </div>
+
                 <div className="space-y-2">
-                  <h3 className="text-2xl font-bold text-white">
-                    {isWhatsAppConfirmed ? 'تم استلام طلبك' : 'برجاء تأكيد طلبك عبر واتساب لإتمام تنفيذه'}
-                  </h3>
+                  <h3 className="text-2xl font-bold text-white">تم استلام طلبك بنجاح!</h3>
                   <p className="text-sm leading-6 text-[#e7dcc8]">
-                    {isWhatsAppConfirmed
-                      ? 'تم استلام طلبك بنجاح، ويمكنك الآن متابعة الطلب.'
-                      : 'يجب تأكيد طلبك عبر واتساب أولاً ليتم متابعة الطلب وتأكيده من قبل الإدارة.'}
+                    شكراً لتسوقك من أثر. جاري مراجعة وتجهيز طلبك وسيتم التواصل معك عند الشحن.
                   </p>
                 </div>
+
+                {orderCode && (
+                  <div className="w-full rounded-2xl bg-[#1b070f] border border-white/10 p-3.5 text-center">
+                    <p className="text-xs text-[#d8b56a] mb-1">رقم الطلب</p>
+                    <p className="font-mono text-sm font-bold text-white tracking-wider">{orderCode}</p>
+                  </div>
+                )}
 
                 <div className="flex w-full flex-col gap-3">
                   <button
                     type="button"
-                    onClick={handleWhatsAppConfirmation}
-                    className="w-full rounded-full bg-[#25D366] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#1fbf5b] shadow-md"
+                    onClick={handleTrackOrder}
+                    className="w-full rounded-full bg-[#D4AF37] hover:bg-[#c49e2f] px-6 py-3.5 text-sm font-bold text-[#4A0E17] transition shadow-md flex items-center justify-center gap-2"
                   >
-                    {isWhatsAppConfirmed ? 'إعادة إرسال تأكيد WhatsApp' : 'تأكيد الطلب عبر WhatsApp'}
+                    <span className="material-symbols-outlined !scale-x-100 text-lg">local_shipping</span>
+                    تتبع طلبك الآن
                   </button>
 
-                  <div className="flex w-full flex-col gap-3 sm:flex-row">
-                    <button
-                      type="button"
-                      onClick={handleTrackOrder}
-                      disabled={!isWhatsAppConfirmed}
-                      className={`flex-1 rounded-full px-6 py-3 text-sm font-semibold text-[#4A0E17] transition shadow-md ${
-                        isWhatsAppConfirmed
-                          ? 'bg-[#D4AF37] hover:bg-[#c49e2f]'
-                          : 'cursor-not-allowed bg-[#D4AF37]/40 text-[#4A0E17]/60'
-                      }`}
-                    >
-                      تتبع طلبك الآن
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleReturnHome}
-                      className="flex-1 rounded-full border border-white/20 bg-white/5 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-                    >
-                      العودة للرئيسية
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={handleReturnHome}
+                    className="w-full rounded-full border border-white/20 bg-white/5 hover:bg-white/10 px-6 py-3 text-sm font-semibold text-white transition"
+                  >
+                    العودة للرئيسية
+                  </button>
                 </div>
               </div>
             </div>
@@ -260,7 +243,7 @@ export const CartDrawer: React.FC = () => {
             </div>
             <button
               onClick={handleStartCheckout}
-              className="w-full bg-[#4A0E17] text-white py-4 rounded-full font-label-md uppercase tracking-widest hover:bg-[#5b1f28] transition-colors duration-300"
+              className="w-full bg-[#4A0E17] text-white py-4 rounded-full font-label-md uppercase tracking-widest hover:bg-[#5b1f28] transition-colors duration-300 border border-[#D4AF37]/30 shadow-lg"
             >
               إتمام الطلب
             </button>

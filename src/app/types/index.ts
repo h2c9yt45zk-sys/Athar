@@ -136,3 +136,35 @@ export interface CategoryInfo {
   description: string;
 }
 
+export interface UserProfile {
+  id: string;
+  phone: string;
+  fullName: string;
+  governorate?: string;
+  address?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface UserLoginPayload {
+  phone: string;
+  password: string;
+}
+
+export interface UserSignUpPayload {
+  fullName: string;
+  phone: string;
+  governorate: string;
+  address: string;
+  password: string;
+}
+
+export interface UserUpdateProfilePayload {
+  fullName?: string;
+  governorate?: string;
+  address?: string;
+  currentPassword?: string;
+  newPassword?: string;
+}
+
+

@@ -1,10 +1,13 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { CartProvider } from './contexts/CartContext';
+import { AuthProvider } from './contexts/AuthContext';
 import { Header } from './components/Header';
 import { CartDrawer } from './components/CartDrawer';
 import { Footer } from './components/Footer';
-import Home from './pages/Home.tsx';
+import { AuthModal } from './components/AuthModal';
+import { UserProfileModal } from './components/UserProfileModal';
+import Home from './pages/Home';
 import { WomenCollection } from './pages/WomenCollection';
 import { MenCollection } from './pages/MenCollection';
 import { IslamicCollection } from './pages/IslamicCollection';
@@ -33,17 +36,21 @@ const AppLayout: React.FC = () => {
       </div>
       {!isAdminRoute && <CartDrawer />}
       {!isAdminRoute && <Footer />}
+      <AuthModal />
+      <UserProfileModal />
     </div>
   );
 };
 
 export const App: React.FC = () => {
   return (
-    <CartProvider>
-      <BrowserRouter>
-        <AppLayout />
-      </BrowserRouter>
-    </CartProvider>
+    <AuthProvider>
+      <CartProvider>
+        <BrowserRouter>
+          <AppLayout />
+        </BrowserRouter>
+      </CartProvider>
+    </AuthProvider>
   );
 };
 
