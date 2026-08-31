@@ -3,6 +3,7 @@ import { CartItem, Order, OrderItem, Product, CategoryInfo, CustomerOrderPayload
 import { CATEGORIES } from '../data/data';
 import { OrderService } from '../services/orderService';
 import { ProductService } from '../services/productService';
+import { useAuth } from './AuthContext';
 
 type CategoryKey = 'women' | 'men' | 'islamic';
 
@@ -88,6 +89,7 @@ const getStoredCategories = (): Record<CategoryKey, CategoryInfo> => {
 };
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { isAuthenticated, openAuthModal } = useAuth();
   const [cart, setCart] = useState<CartItem[]>(getStoredCart);
   const [orders, setOrders] = useState<Order[]>(getStoredOrders);
   const [products, setProducts] = useState<Product[]>(getStoredProducts);
@@ -143,6 +145,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [cart, orders, products, categories]);
 
   const toggleCart = (open?: boolean) => {
+    const shouldOpen = open !== undefined ? open : !isCartOpen;
+
+    if (shouldOpen && !isAuthenticated) {
+      openAuthModal('login');
+      return;
+    }
+
     setIsCartOpen((prev) => (open !== undefined ? open : !prev));
   };
 
@@ -152,6 +161,11 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     image: string,
     options?: { size?: string; productId?: string }
   ) => {
+    if (!isAuthenticated) {
+      openAuthModal('login');
+      return;
+    }
+
     const newItem: CartItem = {
       id: Date.now() + Math.random(),
       productId: options?.productId,
