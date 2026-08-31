@@ -74,15 +74,12 @@ export interface CustomerOrderPayload {
 
 export type OrderStatus =
   | 'جاري التأكيد'
-  | 'تم التأكيد'
   | 'قيد التجهيز'
   | 'تم الشحن'
-  | 'تم التوصيل'
-  | 'قيد الانتظار';
+  | 'تم التوصيل';
 
 export const ORDER_STATUS_SEQUENCE: OrderStatus[] = [
   'جاري التأكيد',
-  'تم التأكيد',
   'قيد التجهيز',
   'تم الشحن',
   'تم التوصيل',
@@ -94,7 +91,6 @@ export const normalizeOrderStatus = (status?: string | null): OrderStatus => {
     case 'جاري التأكيد':
       return 'جاري التأكيد';
     case 'تم التأكيد':
-      return 'تم التأكيد';
     case 'قيد التجهيز':
       return 'قيد التجهيز';
     case 'تم الشحن':

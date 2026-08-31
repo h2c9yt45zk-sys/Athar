@@ -20,7 +20,7 @@ create table if not exists public.orders (
   address text not null,
   notes text,
   total_amount numeric(12, 2) not null default 0,
-  status text not null default 'جاري التأكيد',
+  status text not null default 'جاري التأكيد' check (status in ('جاري التأكيد', 'قيد التجهيز', 'تم الشحن', 'تم التوصيل')),
   user_id uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -38,6 +38,13 @@ alter table public.orders
   add column if not exists user_id uuid references public.profiles(id) on delete set null,
   add column if not exists created_at timestamptz default now(),
   add column if not exists updated_at timestamptz default now();
+
+alter table public.orders
+  drop constraint if exists orders_status_check;
+
+alter table public.orders
+  add constraint orders_status_check
+  check (status in ('جاري التأكيد', 'قيد التجهيز', 'تم الشحن', 'تم التوصيل'));
 
 -- 3. Create or recreate public.order_items table
 create table if not exists public.order_items (

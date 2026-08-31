@@ -12,12 +12,6 @@ const ORDER_STEPS: Array<{ key: OrderStatus; label: string; description: string;
     icon: 'verified_user',
   },
   {
-    key: 'تم التأكيد',
-    label: 'تم التأكيد',
-    description: 'تم تأكيد طلبك وجاري إرساله لقسم التجهيز.',
-    icon: 'check_circle',
-  },
-  {
     key: 'قيد التجهيز',
     label: 'قيد التجهيز',
     description: 'يتم الآن تجهيز وتغليف طلبك بعناية تامة.',
@@ -39,20 +33,9 @@ const ORDER_STEPS: Array<{ key: OrderStatus; label: string; description: string;
 
 const STEP_INDEX_MAP: Record<OrderStatus, number> = {
   'جاري التأكيد': 0,
-  'تم التأكيد': 1,
-  'قيد التجهيز': 2,
-  'تم الشحن': 3,
-  'تم التوصيل': 4,
-  'قيد الانتظار': 0,
-};
-
-const statusBadgeStyles: Record<OrderStatus, string> = {
-  'جاري التأكيد': 'bg-amber-500/15 text-amber-300 border-amber-400/30',
-  'تم التأكيد': 'bg-cyan-500/15 text-cyan-300 border-cyan-400/30',
-  'قيد التجهيز': 'bg-sky-500/15 text-sky-300 border-sky-400/30',
-  'تم الشحن': 'bg-violet-500/15 text-violet-300 border-violet-400/30',
-  'تم التوصيل': 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30',
-  'قيد الانتظار': 'bg-amber-500/15 text-amber-300 border-amber-400/30',
+  'قيد التجهيز': 1,
+  'تم الشحن': 2,
+  'تم التوصيل': 3,
 };
 
 // Mask phone: display 010****5678
@@ -272,20 +255,11 @@ export const OrderTracking: React.FC = () => {
                       {/* Order Header: Order Reference + Date + Status */}
                       <div className="border-b border-white/10 bg-[#250d19] p-5 md:p-6">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                                    <div>
-                                      <p className="mt-1 text-xs text-white/70">
-                                        تاريخ الطلب: <span className="text-white font-medium">{formatDate(order.createdAt)}</span>
-                                      </p>
-                                    </div>
-
-                          <span
-                            className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-xs font-bold self-start sm:self-auto ${
-                              statusBadgeStyles[normalizedStatus] ?? statusBadgeStyles['جاري التأكيد']
-                            }`}
-                          >
-                            <span className="h-2 w-2 rounded-full bg-current animate-pulse" />
-                            {normalizedStatus}
-                          </span>
+                          <div>
+                            <p className="mt-1 text-xs text-white/70">
+                              تاريخ الطلب: <span className="text-white font-medium">{formatDate(order.createdAt)}</span>
+                            </p>
+                          </div>
                         </div>
 
                         {/* Masked destination info */}

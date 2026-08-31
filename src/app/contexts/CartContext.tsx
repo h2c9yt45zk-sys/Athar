@@ -42,6 +42,12 @@ const pruneExpiredDeliveredOrders = (orderList: Order[]) =>
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
+const generateUniqueOrderId = (): string => {
+  const timestampPart = Date.now().toString(36).toUpperCase();
+  const randomPart = Math.random().toString(36).slice(2, 8).toUpperCase();
+  return `ORD-${timestampPart}-${randomPart}`;
+};
+
 const getStoredCart = (): CartItem[] => {
   try {
     const storedCart = window.localStorage.getItem('athar_cart');
@@ -215,8 +221,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }));
 
     const initialOrder: Order = {
-      id: `ORD-${Date.now()}`,
-      orderCode: '',
+      id: generateUniqueOrderId(),
+      orderCode: generateUniqueOrderId(),
       customerName: customer.fullName,
       phone: customer.phone,
       governorate: customer.governorate,

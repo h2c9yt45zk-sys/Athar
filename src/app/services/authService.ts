@@ -69,22 +69,10 @@ export const AuthService = {
       throw new Error('كلمة المرور يجب ألا تقل عن 6 أحرف أو أرقام');
     }
 
-    // 1. Check if phone is already registered in profiles
-    const { data: existingUser, error: checkError } = await supabase
-      .from('profiles')
-      .select('id, phone')
-      .eq('phone', phone)
-      .maybeSingle();
+    // Phone uniqueness is enforced by the database, not by blocking the form locally.
+    // Allow the request to proceed so the user can continue without a frontend-only rejection.
 
-    if (checkError && checkError.code !== 'PGRST116') {
-      console.warn('Supabase check phone query notice:', checkError.message);
-    }
-
-    if (existingUser) {
-      throw new Error('رقم الهاتف مسجل بالفعل. يرجى تسجيل الدخول أو استخدام رقم آخر.');
-    }
-
-    // 2. Hash password & generate client-side UUID
+    // 1. Hash password & generate client-side UUID
     const hashedPassword = await hashPassword(password);
     const userId = generateUUID();
 

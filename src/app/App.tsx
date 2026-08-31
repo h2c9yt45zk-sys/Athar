@@ -44,13 +44,13 @@ const AppLayout: React.FC = () => {
 
 export const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <CartProvider>
-        <BrowserRouter>
+    <BrowserRouter>
+      <AuthProvider>
+        <CartProvider>
           <AppLayout />
-        </BrowserRouter>
-      </CartProvider>
-    </AuthProvider>
+        </CartProvider>
+      </AuthProvider>
+    </BrowserRouter>
   );
 };
 

@@ -67,11 +67,9 @@ const sidebarItems: Array<{ key: 'orders' | 'store'; label: string; icon: typeof
 
 const statusClasses: Record<OrderStatus, string> = {
   'جاري التأكيد': 'bg-amber-500/15 text-amber-200 border-amber-400/30',
-  'تم التأكيد': 'bg-cyan-500/15 text-cyan-200 border-cyan-400/30',
   'قيد التجهيز': 'bg-sky-500/15 text-sky-200 border-sky-400/30',
   'تم الشحن': 'bg-violet-500/15 text-violet-200 border-violet-400/30',
   'تم التوصيل': 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30',
-  'قيد الانتظار': 'bg-amber-500/15 text-amber-200 border-amber-400/30',
 };
 
 const paymentStatusClasses: Record<PaymentStatus, string> = {
@@ -83,7 +81,6 @@ const paymentStatusClasses: Record<PaymentStatus, string> = {
 const orderStatusTabs: Array<{ label: string; value: 'الكل' | OrderStatus }> = [
   { label: 'الكل', value: 'الكل' },
   { label: 'جاري التأكيد', value: 'جاري التأكيد' },
-  { label: 'تم التأكيد', value: 'تم التأكيد' },
   { label: 'قيد التجهيز', value: 'قيد التجهيز' },
   { label: 'تم الشحن', value: 'تم الشحن' },
   { label: 'تم التوصيل', value: 'تم التوصيل' },
@@ -804,8 +801,7 @@ export default function AdminDashboard() {
                         >
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
-                              <p className="font-semibold text-white">{order.orderCode || 'رمز غير متوفر'}</p>
-                              <p className="mt-1 text-sm text-[#f2e1d0]">{order.customerName}</p>
+                              <p className="text-sm text-[#f2e1d0]">{order.customerName}</p>
                             </div>
                             <div className="text-sm text-[#f2e1d0]">
                               <p>{order.phone}</p>
@@ -833,7 +829,6 @@ export default function AdminDashboard() {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm uppercase tracking-[0.3em] text-[#c8914f]">تفاصيل الطلب</p>
-                        <h3 className="mt-1 text-xl font-semibold text-white">#{normalizeOrderCode(selectedOrder.orderCode) || 'رمز غير متوفر'}</h3>
                       </div>
                       <div className="rounded-2xl border border-[#c8914f]/20 bg-[#c8914f]/10 p-2 text-[#f3ce90]">
                         <Eye className="h-4 w-4" />
@@ -940,7 +935,7 @@ export default function AdminDashboard() {
                       <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                         <p className="text-sm text-[#f2e1d0]">تغيير حالة الطلب</p>
                         <div className="mt-3 flex flex-wrap gap-2">
-                          {(['جاري التأكيد', 'تم التأكيد', 'قيد التجهيز', 'تم الشحن', 'تم التوصيل'] as OrderStatus[]).map((status) => (
+                          {(['جاري التأكيد', 'قيد التجهيز', 'تم الشحن', 'تم التوصيل'] as OrderStatus[]).map((status) => (
                             <button
                               key={status}
                               className={`rounded-full border px-3 py-2 text-sm transition ${selectedOrder.status === status ? 'border-[#c8914f] bg-[#c8914f]/15 text-[#f3ce90]' : 'border-white/10 text-[#f2e1d0] hover:bg-white/5'}`}

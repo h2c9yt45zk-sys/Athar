@@ -57,14 +57,54 @@ alter table public.profiles
   alter column id set default gen_random_uuid();
 
 -- 5. Enforce unique index on normalized phone numbers
+-- Only the profiles table should enforce phone uniqueness for account registration.
+-- Guest orders remain separate and are not blocked by profile uniqueness checks.
 drop index if exists idx_profiles_phone_unique;
 drop index if exists profiles_phone_unique_idx;
 
 create unique index if not exists idx_profiles_phone_unique
-  on public.profiles (lower(trim(phone)));
+  on public.profiles (lower(regexp_replace(phone, '[^0-9]', '', 'g')));
 
 create index if not exists idx_profiles_phone_lookup
   on public.profiles (phone);
+
+create or replace function public.normalize_phone_value(raw_phone text)
+returns text
+language sql
+stable
+as $$
+  select regexp_replace(coalesce(raw_phone, ''), '[^0-9]', '', 'g');
+$$;
+
+create or replace function public.ensure_profiles_phone_constraints()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.phone = public.normalize_phone_value(new.phone);
+
+  if new.phone is null or trim(new.phone) = '' then
+    raise exception 'Phone number is required';
+  end if;
+
+  if exists (
+    select 1
+    from public.profiles p
+    where lower(regexp_replace(p.phone, '[^0-9]', '', 'g')) = lower(new.phone)
+      and p.id <> new.id
+  ) then
+    raise exception 'رقم الهاتف مسجل بالفعل. يرجى تسجيل الدخول أو استخدام رقم آخر.';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_profiles_phone_constraints on public.profiles;
+create trigger trg_profiles_phone_constraints
+before insert or update on public.profiles
+for each row
+execute function public.ensure_profiles_phone_constraints();
 
 -- 6. Enable Row Level Security (RLS)
 alter table public.profiles enable row level security;
