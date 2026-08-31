@@ -18,9 +18,6 @@ export const CartDrawer: React.FC = () => {
   const { user } = useAuth();
 
   const [stage, setStage] = useState<'cart' | 'checkout' | 'success'>('cart');
-  const [orderId, setOrderId] = useState<string | null>(null);
-  const [orderCode, setOrderCode] = useState<string | null>(null);
-  const [orderPhone, setOrderPhone] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string>('');
   const [checkoutInitialValues, setCheckoutInitialValues] = useState<CustomerOrderPayload>({
@@ -45,9 +42,6 @@ export const CartDrawer: React.FC = () => {
   useEffect(() => {
     if (!isCartOpen) {
       setStage('cart');
-      setOrderId(null);
-      setOrderCode(null);
-      setOrderPhone(null);
       setIsSubmitting(false);
       setCheckoutError('');
     }
@@ -71,10 +65,7 @@ export const CartDrawer: React.FC = () => {
     setCheckoutInitialValues(customer);
 
     try {
-      const newOrder = await addOrder(customer, cart, cartSubtotal, user?.id);
-      setOrderId(newOrder.id);
-      setOrderCode(newOrder.orderCode || newOrder.id || null);
-      setOrderPhone(newOrder.phone || customer.phone || null);
+      await addOrder(customer, cart, cartSubtotal, user?.id);
       setStage('success');
     } catch (error: any) {
       console.error('Failed to submit order:', error);
@@ -82,15 +73,6 @@ export const CartDrawer: React.FC = () => {
       setStage('checkout');
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleTrackOrder = () => {
-    toggleCart(false);
-    if (orderPhone) {
-      navigate(`/tracking?phone=${encodeURIComponent(orderPhone)}`);
-    } else {
-      navigate('/tracking');
     }
   };
 
@@ -192,47 +174,38 @@ export const CartDrawer: React.FC = () => {
           )}
 
           {stage === 'success' && (
-            <div className="space-y-4">
-              <div className="flex min-h-[380px] flex-col items-center justify-center gap-5 rounded-[28px] border border-[#d8b56a]/30 bg-[#220912]/95 p-6 text-center shadow-[0_30px_90px_rgba(0,0,0,0.55)]">
-                <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                  <span className="material-symbols-outlined text-4xl !scale-x-100">check_circle</span>
-                </div>
+            <div className="flex min-h-[380px] flex-col items-center justify-center gap-5 rounded-[28px] border border-[#d8b56a]/30 bg-[#220912]/95 p-6 text-center shadow-[0_30px_90px_rgba(0,0,0,0.55)]">
+              <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                <span className="material-symbols-outlined text-4xl !scale-x-100">check_circle</span>
+              </div>
 
-                <div className="space-y-2">
-                  <h3 className="text-2xl font-bold text-white">تم استلام طلبك بنجاح!</h3>
-                  <p className="text-sm leading-6 text-[#e7dcc8]">
-                    شكراً لتسوقك من أثر. جاري مراجعة وتجهيز طلبك وسيتم التواصل معك عند الشحن.
-                  </p>
-                </div>
+              <div className="space-y-2">
+                <h3 className="text-2xl font-bold text-white">تم استلام طلبك بنجاح</h3>
+                <p className="text-sm leading-6 text-[#e7dcc8]">
+                  شكرًا لتسوقك من أثر. تم حفظ طلبك بنجاح وسيتم التواصل معك في أقرب وقت.
+                </p>
+              </div>
 
-                {orderCode && (
-                  <div className="w-full rounded-2xl bg-[#1b070f] border border-white/10 p-3.5 text-center">
-                    <p className="text-xs text-[#d8b56a] mb-1">رقم الطلب</p>
-                    <p className="font-mono text-sm font-bold text-white tracking-wider">{orderCode}</p>
-                  </div>
-                )}
+              <div className="flex w-full flex-col gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={handleReturnHome}
+                  className="w-full rounded-full bg-[#D4AF37] hover:bg-[#c49e2f] px-6 py-3.5 text-sm font-bold text-[#4A0E17] transition shadow-md"
+                >
+                  العودة للرئيسية
+                </button>
 
-                <div className="flex w-full flex-col gap-3">
-                  <button
-                    type="button"
-                    onClick={handleTrackOrder}
-                    className="w-full rounded-full bg-[#D4AF37] hover:bg-[#c49e2f] px-6 py-3.5 text-sm font-bold text-[#4A0E17] transition shadow-md flex items-center justify-center gap-2"
-                  >
-                    <span className="material-symbols-outlined !scale-x-100 text-lg">local_shipping</span>
-                    تتبع طلبك الآن
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleReturnHome}
-                    className="w-full rounded-full border border-white/20 bg-white/5 hover:bg-white/10 px-6 py-3 text-sm font-semibold text-white transition"
-                  >
-                    العودة للرئيسية
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleCart(false)}
+                  className="w-full rounded-full border border-white/20 bg-white/5 hover:bg-white/10 px-6 py-3 text-sm font-semibold text-white transition"
+                >
+                  إغلاق
+                </button>
               </div>
             </div>
           )}
+
         </div>
 
         {stage === 'cart' && cart.length > 0 && (
